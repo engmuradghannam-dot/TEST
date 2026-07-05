@@ -1,19 +1,42 @@
 from rest_framework import viewsets
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter
-from .models import Customer, SalesOrder
-from .serializers import CustomerSerializer, SalesOrderSerializer
+from .models import Customer, SalesOrder, SalesOrderItem, SalesTaxCharge, SalesPayment
+from .serializers import (
+    CustomerSerializer, SalesOrderSerializer, SalesOrderItemSerializer,
+    SalesTaxChargeSerializer, SalesPaymentSerializer,
+)
+from apps.core.mixins import CompanyScopedMixin
 
-class CustomerViewSet(viewsets.ModelViewSet):
+
+class CustomerViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
     queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
-    filter_backends = [DjangoFilterBackend, SearchFilter]
-    search_fields = ['name', 'email', 'tax_id']
-    filterset_fields = ['company', 'is_active']
+    company_field = 'company'
 
-class SalesOrderViewSet(viewsets.ModelViewSet):
+
+class SalesOrderViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
     queryset = SalesOrder.objects.all()
     serializer_class = SalesOrderSerializer
-    filter_backends = [DjangoFilterBackend, SearchFilter]
-    search_fields = ['so_number', 'customer__name']
-    filterset_fields = ['status', 'company', 'customer']
+    company_field = 'company'
+
+
+class SalesOrderItemViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = SalesOrderItem.objects.all()
+    serializer_class = SalesOrderItemSerializer
+    filterset_fields = ['sales_order', 'item']
+    company_field = 'sales_order__company'
+
+
+class SalesTaxChargeViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = SalesTaxCharge.objects.all()
+    serializer_class = SalesTaxChargeSerializer
+    filterset_fields = ['sales_order']
+    company_field = 'sales_order__company'
+
+
+class SalesPaymentViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = SalesPayment.objects.all()
+    serializer_class = SalesPaymentSerializer
+    filterset_fields = ['sales_order']
+    company_field = 'sales_order__company'

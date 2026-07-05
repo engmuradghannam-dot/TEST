@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Account, JournalEntry, JournalEntryLine
+from .models import Account, JournalEntry, JournalEntryLine, CostCenter, Budget
 
 class AccountSerializer(serializers.ModelSerializer):
     class Meta:
@@ -12,7 +12,18 @@ class JournalEntryLineSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class JournalEntrySerializer(serializers.ModelSerializer):
-    lines = JournalEntryLineSerializer(many=True, read_only=True)
     class Meta:
         model = JournalEntry
+        fields = '__all__'
+
+class CostCenterSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CostCenter
+        fields = '__all__'
+
+class BudgetSerializer(serializers.ModelSerializer):
+    variance = serializers.ReadOnlyField()
+    variance_percentage = serializers.ReadOnlyField()
+    class Meta:
+        model = Budget
         fields = '__all__'

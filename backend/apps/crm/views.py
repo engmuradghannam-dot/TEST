@@ -1,19 +1,16 @@
 from rest_framework import viewsets
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter
 from .models import Lead, Opportunity
 from .serializers import LeadSerializer, OpportunitySerializer
+from apps.core.mixins import CompanyScopedMixin
 
-class LeadViewSet(viewsets.ModelViewSet):
+
+class LeadViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
     queryset = Lead.objects.all()
     serializer_class = LeadSerializer
-    filter_backends = [DjangoFilterBackend, SearchFilter]
-    search_fields = ['lead_name', 'organization', 'email']
-    filterset_fields = ['status', 'company']
+    company_field = 'company'
 
-class OpportunityViewSet(viewsets.ModelViewSet):
+
+class OpportunityViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
     queryset = Opportunity.objects.all()
     serializer_class = OpportunitySerializer
-    filter_backends = [DjangoFilterBackend, SearchFilter]
-    search_fields = ['opportunity_name', 'customer_name']
-    filterset_fields = ['status', 'company']
+    company_field = 'company'

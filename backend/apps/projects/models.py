@@ -1,6 +1,6 @@
 from django.db import models
 from apps.core.models import Company
-from apps.hr.models import Employee
+from apps.hr.models import Employee, Team
 
 class Project(models.Model):
     STATUS_CHOICES = [('Open', 'Open'), ('Completed', 'Completed'), ('Cancelled', 'Cancelled'), ('On Hold', 'On Hold')]
@@ -25,6 +25,10 @@ class Task(models.Model):
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Open')
     priority = models.CharField(max_length=50, choices=PRIORITY_CHOICES, default='Medium')
     assigned_to = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True)
+    team = models.ForeignKey(
+        Team, on_delete=models.SET_NULL, null=True, blank=True, related_name='tasks',
+        help_text='If set, every member of this team can see this task even if not personally assigned.'
+    )
     expected_start = models.DateField(null=True, blank=True)
     expected_end = models.DateField(null=True, blank=True)
     description = models.TextField(blank=True)

@@ -1,18 +1,16 @@
 from rest_framework import viewsets
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter
-from .models import AssetCategory, Asset
-from .serializers import AssetCategorySerializer, AssetSerializer
+from .models import Asset, AssetCategory
+from .serializers import AssetSerializer, AssetCategorySerializer
+from apps.core.mixins import CompanyScopedMixin
 
-class AssetCategoryViewSet(viewsets.ModelViewSet):
-    queryset = AssetCategory.objects.all()
-    serializer_class = AssetCategorySerializer
-    filter_backends = [SearchFilter]
-    search_fields = ['name']
 
-class AssetViewSet(viewsets.ModelViewSet):
+class AssetViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
     queryset = Asset.objects.all()
     serializer_class = AssetSerializer
-    filter_backends = [DjangoFilterBackend, SearchFilter]
-    search_fields = ['asset_name', 'asset_code']
-    filterset_fields = ['status', 'category', 'company']
+    company_field = 'company'
+
+
+class AssetCategoryViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = AssetCategory.objects.all()
+    serializer_class = AssetCategorySerializer
+    company_field = 'company'

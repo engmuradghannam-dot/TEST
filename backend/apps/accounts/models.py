@@ -36,3 +36,43 @@ class JournalEntryLine(models.Model):
     debit = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     credit = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     description = models.TextField(blank=True)
+
+
+class CostCenter(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='cost_centers')
+    name = models.CharField(max_length=255)
+    parent_cost_center = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+
+class Budget(models.Model):
+    STATUS_CHOICES = [('Draft', 'Draft'), ('Active', 'Active'), ('Closed', 'Closed')]
+
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='budgets')
+    name = models.CharField(max_length=255)
+    fiscal_year = models.CharField(max_length=20)
+    cost_center = models.ForeignKey(CostCenter, on_delete=models.SET_NULL, null=True, blank=True)
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='budgets')
+    budget_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    actual_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Draft')
+    start_date = models.DateField()
+    end_date = models.DateField()
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def variance(self):
+        return self.actual_amount - self.budget_amount
+
+    @property
+    def variance_percentage(self):
+        if not self.budget_amount:
+            return 0
+        return (self.variance / self.budget_amount) * 100
+
+    def __str__(self):
+        return f"{self.name} ({self.fiscal_year})"

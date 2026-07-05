@@ -1,19 +1,16 @@
 from rest_framework import viewsets
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter
-from .models import BOM, WorkOrder
-from .serializers import BOMSerializer, WorkOrderSerializer
+from .models import WorkOrder, BOM
+from .serializers import WorkOrderSerializer, BOMSerializer
+from apps.core.mixins import CompanyScopedMixin
 
-class BOMViewSet(viewsets.ModelViewSet):
-    queryset = BOM.objects.all()
-    serializer_class = BOMSerializer
-    filter_backends = [DjangoFilterBackend, SearchFilter]
-    search_fields = ['bom_name', 'item__item_name']
-    filterset_fields = ['company', 'is_active']
 
-class WorkOrderViewSet(viewsets.ModelViewSet):
+class WorkOrderViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
     queryset = WorkOrder.objects.all()
     serializer_class = WorkOrderSerializer
-    filter_backends = [DjangoFilterBackend, SearchFilter]
-    search_fields = ['wo_number', 'item_to_manufacture__item_name']
-    filterset_fields = ['status', 'company']
+    company_field = 'company'
+
+
+class BOMViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = BOM.objects.all()
+    serializer_class = BOMSerializer
+    company_field = 'company'

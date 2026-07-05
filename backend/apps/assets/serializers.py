@@ -7,6 +7,8 @@ class AssetCategorySerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class AssetSerializer(serializers.ModelSerializer):
+    accumulated_depreciation = serializers.ReadOnlyField()
+    book_value = serializers.ReadOnlyField()
     class Meta:
         model = Asset
         fields = '__all__'

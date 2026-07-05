@@ -1,24 +1,57 @@
 from rest_framework import viewsets
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter
-from .models import Item, ItemGroup, StockEntry
-from .serializers import ItemSerializer, ItemGroupSerializer, StockEntrySerializer
+from .models import (
+    Item, ItemGroup, StockEntry, ItemSerialNumber, ItemBatch,
+    StockReconciliation, StockReconciliationItem,
+)
+from .serializers import (
+    ItemSerializer, ItemGroupSerializer, StockEntrySerializer,
+    ItemSerialNumberSerializer, ItemBatchSerializer,
+    StockReconciliationSerializer, StockReconciliationItemSerializer,
+)
+from apps.core.mixins import CompanyScopedMixin
 
-class ItemViewSet(viewsets.ModelViewSet):
+
+class ItemViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
     queryset = Item.objects.all()
     serializer_class = ItemSerializer
-    filter_backends = [DjangoFilterBackend, SearchFilter]
-    search_fields = ['item_code', 'item_name', 'description']
-    filterset_fields = ['item_group', 'is_stock_item', 'company']
+    company_field = 'company'
 
-class ItemGroupViewSet(viewsets.ModelViewSet):
+
+class ItemGroupViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
     queryset = ItemGroup.objects.all()
     serializer_class = ItemGroupSerializer
-    filter_backends = [SearchFilter]
-    search_fields = ['name']
+    company_field = 'company'
 
-class StockEntryViewSet(viewsets.ModelViewSet):
+
+class StockEntryViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
     queryset = StockEntry.objects.all()
     serializer_class = StockEntrySerializer
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['warehouse', 'item', 'entry_type']
+    company_field = 'company'
+
+
+class ItemSerialNumberViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = ItemSerialNumber.objects.all()
+    serializer_class = ItemSerialNumberSerializer
+    filterset_fields = ['item', 'status']
+    company_field = 'item__company'
+
+
+class ItemBatchViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = ItemBatch.objects.all()
+    serializer_class = ItemBatchSerializer
+    filterset_fields = ['item']
+    company_field = 'item__company'
+
+
+class StockReconciliationViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = StockReconciliation.objects.all()
+    serializer_class = StockReconciliationSerializer
+    filterset_fields = ['warehouse', 'status', 'reason']
+    company_field = 'company'
+
+
+class StockReconciliationItemViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = StockReconciliationItem.objects.all()
+    serializer_class = StockReconciliationItemSerializer
+    filterset_fields = ['reconciliation', 'item']
+    company_field = 'reconciliation__company'
