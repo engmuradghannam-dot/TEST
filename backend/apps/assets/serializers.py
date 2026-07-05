@@ -12,3 +12,10 @@ class AssetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Asset
         fields = '__all__'
+
+    def validate(self, data):
+        purchase_value = data.get('purchase_value', getattr(self.instance, 'purchase_value', None))
+        salvage_value = data.get('salvage_value', getattr(self.instance, 'salvage_value', None))
+        if purchase_value is not None and salvage_value is not None and salvage_value > purchase_value:
+            raise serializers.ValidationError("Salvage value cannot exceed the purchase value.")
+        return data

@@ -6,7 +6,7 @@ from .serializers import (
     CustomerSerializer, SalesOrderSerializer, SalesOrderItemSerializer,
     SalesTaxChargeSerializer, SalesPaymentSerializer,
 )
-from apps.core.mixins import CompanyScopedMixin
+from apps.core.mixins import CompanyScopedMixin, LockAfterSubmitMixin
 
 
 class CustomerViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
@@ -21,18 +21,20 @@ class SalesOrderViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
     company_field = 'company'
 
 
-class SalesOrderItemViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+class SalesOrderItemViewSet(LockAfterSubmitMixin, CompanyScopedMixin, viewsets.ModelViewSet):
     queryset = SalesOrderItem.objects.all()
     serializer_class = SalesOrderItemSerializer
     filterset_fields = ['sales_order', 'item']
     company_field = 'sales_order__company'
+    parent_field = 'sales_order'
 
 
-class SalesTaxChargeViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+class SalesTaxChargeViewSet(LockAfterSubmitMixin, CompanyScopedMixin, viewsets.ModelViewSet):
     queryset = SalesTaxCharge.objects.all()
     serializer_class = SalesTaxChargeSerializer
     filterset_fields = ['sales_order']
     company_field = 'sales_order__company'
+    parent_field = 'sales_order'
 
 
 class SalesPaymentViewSet(CompanyScopedMixin, viewsets.ModelViewSet):

@@ -23,6 +23,27 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
         model = LeaveRequest
         fields = '__all__'
 
+    def validate(self, data):
+        start = data.get('start_date', getattr(self.instance, 'start_date', None))
+        end = data.get('end_date', getattr(self.instance, 'end_date', None))
+        employee = data.get('employee', getattr(self.instance, 'employee', None))
+
+        if start and end and end < start:
+            raise serializers.ValidationError("End date cannot be before start date.")
+
+        if employee and start and end:
+            overlapping = LeaveRequest.objects.filter(
+                employee=employee, status__in=['Pending', 'Approved'],
+                start_date__lte=end, end_date__gte=start,
+            )
+            if self.instance:
+                overlapping = overlapping.exclude(pk=self.instance.pk)
+            if overlapping.exists():
+                raise serializers.ValidationError(
+                    "This employee already has a pending or approved leave request overlapping these dates."
+                )
+        return data
+
 class PayrollSerializer(serializers.ModelSerializer):
     overtime_amount = serializers.ReadOnlyField()
     gross_salary = serializers.ReadOnlyField()

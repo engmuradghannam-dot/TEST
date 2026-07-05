@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.validators import MinValueValidator
 from apps.core.models import Company, Warehouse, Branch
 from apps.inventory.models import Item
 
@@ -56,7 +57,7 @@ class PurchaseOrder(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True)
     currency = models.CharField(max_length=10, default='SAR')
     payment_terms = models.CharField(max_length=50, choices=PAYMENT_TERMS, blank=True)
-    discount = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    discount = models.DecimalField(max_digits=18, decimal_places=2, default=0, validators=[MinValueValidator(0)])
     incoterm = models.CharField(max_length=50, blank=True, choices=[
         ('EXW', 'EXW'), ('FOB', 'FOB'), ('CIF', 'CIF'), ('DDP', 'DDP'), ('DAP', 'DAP'),
     ])
@@ -76,6 +77,18 @@ class PurchaseOrder(models.Model):
     def outstanding_amount(self):
         return self.grand_total - self.total_paid
 
+    def recalculate_totals(self):
+        """Recompute totals from line items and tax charges. Called
+        automatically via signals whenever items/taxes change."""
+        items = list(self.items.all())
+        self.total_qty = sum((i.qty for i in items), 0)
+        self.total_amount = sum((i.amount for i in items), 0)
+        subtotal_after_discount = self.total_amount - (self.discount or 0)
+        self.grand_total = subtotal_after_discount + self.total_tax
+        PurchaseOrder.objects.filter(pk=self.pk).update(
+            total_qty=self.total_qty, total_amount=self.total_amount, grand_total=self.grand_total
+        )
+
     def __str__(self):
         return self.po_number
 
@@ -83,17 +96,21 @@ class PurchaseOrder(models.Model):
 class PurchaseOrderItem(models.Model):
     purchase_order = models.ForeignKey(PurchaseOrder, on_delete=models.CASCADE, related_name='items')
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
-    qty = models.DecimalField(max_digits=18, decimal_places=2)
-    rate = models.DecimalField(max_digits=18, decimal_places=2)
-    amount = models.DecimalField(max_digits=18, decimal_places=2)
-    received_qty = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    qty = models.DecimalField(max_digits=18, decimal_places=2, validators=[MinValueValidator(0.01)])
+    rate = models.DecimalField(max_digits=18, decimal_places=2, validators=[MinValueValidator(0)])
+    amount = models.DecimalField(max_digits=18, decimal_places=2, editable=False, default=0)
+    received_qty = models.DecimalField(max_digits=18, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+
+    def save(self, *args, **kwargs):
+        self.amount = self.qty * self.rate
+        super().save(*args, **kwargs)
 
 
 class PurchaseTaxCharge(models.Model):
     purchase_order = models.ForeignKey(PurchaseOrder, on_delete=models.CASCADE, related_name='tax_charges')
     description = models.CharField(max_length=255, default='VAT')
-    tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=15)
-    tax_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=15, validators=[MinValueValidator(0)])
+    tax_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0, validators=[MinValueValidator(0)])
 
     def __str__(self):
         return f"{self.description} ({self.tax_rate}%)"
@@ -102,7 +119,7 @@ class PurchaseTaxCharge(models.Model):
 class PurchasePayment(models.Model):
     purchase_order = models.ForeignKey(PurchaseOrder, on_delete=models.CASCADE, related_name='payments')
     payment_date = models.DateField()
-    amount = models.DecimalField(max_digits=18, decimal_places=2)
+    amount = models.DecimalField(max_digits=18, decimal_places=2, validators=[MinValueValidator(0.01)])
     payment_method = models.CharField(max_length=50, choices=PAYMENT_METHODS, default='Bank Transfer')
     reference = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

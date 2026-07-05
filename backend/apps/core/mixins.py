@@ -19,7 +19,6 @@ class CompanyScopedMixin:
     do not use this mixin — restrict access with permission_classes instead.
     """
     company_field = 'company'
-
     def get_queryset(self):
         qs = super().get_queryset()
         user = self.request.user
@@ -72,3 +71,49 @@ class CompanyScopedMixin:
                 return None
             obj = getattr(obj, part, None)
         return obj
+
+
+class LockAfterSubmitMixin:
+    """
+    Prevents editing/deleting a document once its parent transaction has left
+    Draft status. Attach to line-item ViewSets (PO items, tax charges,
+    payments, etc.) that hang off a parent document with a `status` field.
+
+    Set:
+      - parent_field: attribute name on the instance/serializer pointing to
+                       the parent document (e.g. 'purchase_order').
+      - draft_statuses: set of parent statuses in which edits are still
+                        allowed (default: {'Draft'}).
+    """
+    parent_field = None
+    draft_statuses = {'Draft'}
+
+    def _get_parent(self, validated_data=None, instance=None):
+        if instance is not None:
+            return getattr(instance, self.parent_field, None)
+        if validated_data is not None:
+            return validated_data.get(self.parent_field)
+        return None
+
+    def _assert_editable(self, parent):
+        if parent is not None and getattr(parent, 'status', None) not in self.draft_statuses:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError(
+                f"Cannot modify this line — the parent document is already '{parent.status}'. "
+                "Only Draft documents can be edited."
+            )
+
+    def perform_create(self, serializer):
+        parent = self._get_parent(validated_data=serializer.validated_data)
+        self._assert_editable(parent)
+        super().perform_create(serializer)
+
+    def perform_update(self, serializer):
+        parent = self._get_parent(instance=serializer.instance)
+        self._assert_editable(parent)
+        super().perform_update(serializer)
+
+    def perform_destroy(self, instance):
+        parent = self._get_parent(instance=instance)
+        self._assert_editable(parent)
+        super().perform_destroy(instance)
