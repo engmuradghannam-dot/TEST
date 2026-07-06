@@ -4,6 +4,7 @@ Nexus CE-ERP OS - API URLs
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
+from apps.core.views import UIScreenViewSet
 from apps.core.api_views import (
     WorkflowDefinitionViewSet, ProcessInstanceViewSet, TaskInstanceViewSet,
     StateMachineViewSet, AIConversationViewSet, AIPromptTemplateViewSet,
@@ -40,6 +41,7 @@ router.register(r'plugins/tenant', TenantPluginViewSet, basename='tenant-plugin'
 
 # Observability
 router.register(r'system/observability', ObservabilityViewSet, basename='observability')
+router.register(r'ui-screens', UIScreenViewSet, basename='ui-screens')
 
 urlpatterns = [
     path('', include(router.urls)),

@@ -39,3 +39,11 @@ class PrintTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = PrintTemplate
         fields = '__all__'
+
+
+class UIScreenSerializer(serializers.ModelSerializer):
+    class Meta:
+        from apps.core.models import UIScreen
+        model = UIScreen
+        fields = '__all__'
+        read_only_fields = ('company', 'created_by')

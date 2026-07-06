@@ -3,21 +3,72 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import {
   LayoutDashboard, Workflow, Brain, Puzzle, TrendingUp,
-  Settings, Menu, X, MessageSquare, Bot
+  Settings, Menu, X, MessageSquare, Bot, Sparkles,
+  BookOpen, Boxes, ShoppingCart, Receipt, Factory, Users2, Contact2,
+  FolderKanban, Building2, PencilRuler, BarChart3,
 } from 'lucide-react';
 import AIAssistant from './components/AIAssistant';
 import WorkflowBuilder from './pages/WorkflowBuilder';
 import AgentDashboard from './pages/AgentDashboard';
 import PluginMarketplace from './pages/PluginMarketplace';
 import SelfImprovementDashboard from './pages/SelfImprovementDashboard';
+import FinancialReports from './pages/FinancialReports';
+import ScreenBuilder from './pages/ScreenBuilder';
+import JournalEntries from './pages/JournalEntries';
+import Budgets from './pages/Budgets';
+import Items from './pages/Items';
+import StockReconciliation from './pages/StockReconciliation';
+import WarehousesBranches from './pages/WarehousesBranches';
+import PurchaseOrders from './pages/PurchaseOrders';
+import Suppliers from './pages/Suppliers';
+import SalesOrders from './pages/SalesOrders';
+import Customers from './pages/Customers';
+import WorkOrders from './pages/WorkOrders';
+import Employees from './pages/Employees';
+import Payrolls from './pages/Payrolls';
+import LeaveRequests from './pages/LeaveRequests';
+import Teams from './pages/Teams';
+import CRM from './pages/CRM';
+import Projects from './pages/Projects';
+import Tasks from './pages/Tasks';
+import TimeTracking from './pages/TimeTracking';
+import Assets from './pages/Assets';
+import Companies from './pages/Companies';
 
 function Sidebar({ isOpen, toggleSidebar }) {
   const menuItems = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { group: 'Finance' },
+    { path: '/finance/reports', label: 'Financial Reports', icon: BarChart3 },
+    { path: '/finance/journal-entries', label: 'Journal Entries', icon: BookOpen },
+    { path: '/finance/budgets', label: 'Budgets', icon: Receipt },
+    { group: 'Operations' },
+    { path: '/inventory/items', label: 'Items', icon: Boxes },
+    { path: '/inventory/reconciliation', label: 'Stock Reconciliation', icon: Boxes },
+    { path: '/inventory/warehouses', label: 'Warehouses & Branches', icon: Building2 },
+    { path: '/buying/orders', label: 'Purchase Orders', icon: ShoppingCart },
+    { path: '/buying/suppliers', label: 'Suppliers', icon: Contact2 },
+    { path: '/selling/orders', label: 'Sales Orders', icon: Receipt },
+    { path: '/selling/customers', label: 'Customers', icon: Users2 },
+    { path: '/manufacturing/work-orders', label: 'Work Orders', icon: Factory },
+    { group: 'People' },
+    { path: '/hr/employees', label: 'Employees', icon: Users2 },
+    { path: '/hr/payrolls', label: 'Payrolls', icon: Receipt },
+    { path: '/hr/leave-requests', label: 'Leave Requests', icon: Users2 },
+    { path: '/hr/teams', label: 'Teams', icon: Users2 },
+    { group: 'Growth' },
+    { path: '/crm', label: 'CRM', icon: Contact2 },
+    { path: '/projects', label: 'Projects', icon: FolderKanban },
+    { path: '/projects/tasks', label: 'Tasks', icon: FolderKanban },
+    { path: '/projects/time', label: 'Time Tracking', icon: FolderKanban },
+    { path: '/assets', label: 'Assets', icon: Building2 },
+    { group: 'Platform' },
     { path: '/workflows', label: 'Workflow Builder', icon: Workflow },
+    { path: '/screens', label: 'Screen Builder', icon: PencilRuler },
     { path: '/agents', label: 'AI Agents', icon: Brain },
     { path: '/plugins', label: 'Plugin Marketplace', icon: Puzzle },
     { path: '/improvements', label: 'Self-Improvement', icon: TrendingUp },
+    { path: '/companies', label: 'Companies', icon: Building2 },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];
 
@@ -49,18 +100,25 @@ function Sidebar({ isOpen, toggleSidebar }) {
             </button>
           </div>
         </div>
-        <nav className="flex-1 p-4 space-y-1">
-          {menuItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              onClick={() => window.innerWidth < 1024 && toggleSidebar()}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-indigo-600 transition-colors"
-            >
-              <item.icon className="w-5 h-5" />
-              {item.label}
-            </Link>
-          ))}
+        <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+          {menuItems.map((item, idx) =>
+            item.group ? (
+              <p key={`g-${idx}`}
+                className="px-3 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                {item.group}
+              </p>
+            ) : (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={() => window.innerWidth < 1024 && toggleSidebar()}
+                className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-indigo-600 transition-colors"
+              >
+                <item.icon className="w-5 h-5" />
+                {item.label}
+              </Link>
+            )
+          )}
         </nav>
         <div className="p-4 border-t border-gray-200">
           <div className="bg-gradient-to-r from-indigo-50 to-violet-50 rounded-xl p-3">
@@ -223,6 +281,28 @@ export default function App() {
           <main className="flex-1 overflow-y-auto">
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/finance/reports" element={<FinancialReports />} />
+              <Route path="/finance/journal-entries" element={<JournalEntries />} />
+              <Route path="/finance/budgets" element={<Budgets />} />
+              <Route path="/inventory/items" element={<Items />} />
+              <Route path="/inventory/reconciliation" element={<StockReconciliation />} />
+              <Route path="/inventory/warehouses" element={<WarehousesBranches />} />
+              <Route path="/buying/orders" element={<PurchaseOrders />} />
+              <Route path="/buying/suppliers" element={<Suppliers />} />
+              <Route path="/selling/orders" element={<SalesOrders />} />
+              <Route path="/selling/customers" element={<Customers />} />
+              <Route path="/manufacturing/work-orders" element={<WorkOrders />} />
+              <Route path="/hr/employees" element={<Employees />} />
+              <Route path="/hr/payrolls" element={<Payrolls />} />
+              <Route path="/hr/leave-requests" element={<LeaveRequests />} />
+              <Route path="/hr/teams" element={<Teams />} />
+              <Route path="/crm" element={<CRM />} />
+              <Route path="/projects" element={<Projects />} />
+              <Route path="/projects/tasks" element={<Tasks />} />
+              <Route path="/projects/time" element={<TimeTracking />} />
+              <Route path="/assets" element={<Assets />} />
+              <Route path="/companies" element={<Companies />} />
+              <Route path="/screens" element={<ScreenBuilder />} />
               <Route path="/workflows" element={<WorkflowBuilder />} />
               <Route path="/agents" element={<AgentDashboard />} />
               <Route path="/plugins" element={<PluginMarketplace />} />
@@ -236,5 +316,3 @@ export default function App() {
   );
 }
 
-// Missing import
-import { Sparkles } from 'lucide-react';

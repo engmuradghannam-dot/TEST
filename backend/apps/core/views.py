@@ -88,3 +88,16 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     def get_permissions(self):
         from rest_framework import permissions
         return [permissions.IsAdminUser()]
+
+
+class UIScreenViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    """Low-code screen definitions consumed by the frontend FormEngine."""
+    from apps.core.models import UIScreen
+    from apps.core.serializers import UIScreenSerializer
+    queryset = UIScreen.objects.all()
+    serializer_class = UIScreenSerializer
+    lookup_field = 'slug'
+
+    def perform_create(self, serializer):
+        serializer.save(company=self.request.user.company,
+                        created_by=self.request.user)

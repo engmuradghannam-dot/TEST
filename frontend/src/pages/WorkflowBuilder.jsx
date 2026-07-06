@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { Code, Send, Inbox, Scale, Circle, Phone } from 'lucide-react';
 import {
   ReactFlow,
   Background,
@@ -11,7 +12,8 @@ import {
   NodeToolbar,
   NodeResizer,
   useReactFlow,
-  MarkerType
+  MarkerType,
+  Position,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
@@ -836,5 +838,3 @@ export default function VisualWorkflowBuilder() {
   );
 }
 
-// Missing imports
-import { Position, Code, Send, Inbox, Scale, Circle, Phone } from 'lucide-react';

@@ -215,3 +215,33 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f"{self.action} {self.model_name}#{self.object_id} @ {self.timestamp}"
+
+
+class UIScreen(models.Model):
+    """Low-code screen definition: a JSON schema the frontend FormEngine
+    renders into a working data-entry screen without code changes."""
+    company = models.ForeignKey(Company, on_delete=models.CASCADE,
+                                related_name='ui_screens')
+    slug = models.SlugField(max_length=80)
+    title = models.CharField(max_length=120)
+    title_ar = models.CharField(max_length=120, blank=True)
+    description = models.TextField(blank=True)
+    schema = models.JSONField(
+        default=dict,
+        help_text='{"fields": [{"name","type","label","label_ar",'
+                  '"required","options","default"}], "layout": "single|two-col"}')
+    target_endpoint = models.CharField(
+        max_length=200, blank=True,
+        help_text='API path form submissions POST to, e.g. /api/v1/crm/leads/')
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(User, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [('company', 'slug')]
+        ordering = ['title']
+
+    def __str__(self):
+        return self.title

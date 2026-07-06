@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import {
   Plus, X, Edit2, Trash2, Calendar, Users, AlertTriangle, CheckCircle2,
   Clock, TrendingUp, DollarSign, BarChart3, Target, FolderKanban,
-  Columns3, GitGraph, Brain, ChevronRight
+  Columns, GitGraph, Brain, ChevronRight
 } from 'lucide-react'
 
 const STATUS_OPTIONS = [
@@ -206,7 +206,7 @@ export default function Projects() {
                   onClick={() => navigate(`/kanban/${showDetail.id}`)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-sm hover:bg-purple-100"
                 >
-                  <Columns3 size={16} /> Kanban
+                  <Columns size={16} /> Kanban
                 </button>
                 <button
                   onClick={() => navigate(`/gantt/${showDetail.id}`)}
