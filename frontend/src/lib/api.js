@@ -81,6 +81,11 @@ export const boms = resource('boms')
 
 export const projects = resource('projects')
 export const tasks = resource('tasks')
+export const milestones = resource('milestones')
+export const stakeholders = resource('stakeholders')
+export const risks = resource('risks')
+export const issues = resource('issues')
+export const changeRequests = resource('change-requests')
 
 export const assets = resource('assets')
 export const assetCategories = resource('asset-categories')
