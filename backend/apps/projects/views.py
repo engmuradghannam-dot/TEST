@@ -2,8 +2,11 @@ from django.db.models import Q
 from rest_framework import viewsets
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter
-from .models import Project, Task
-from .serializers import ProjectSerializer, TaskSerializer
+from .models import Project, Task, Milestone, Stakeholder, RiskRegister, IssueLog, ChangeRequest
+from .serializers import (
+    ProjectSerializer, TaskSerializer, MilestoneSerializer, StakeholderSerializer,
+    RiskRegisterSerializer, IssueLogSerializer, ChangeRequestSerializer,
+)
 from apps.core.mixins import CompanyScopedMixin
 
 
@@ -12,7 +15,7 @@ class ProjectViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
     serializer_class = ProjectSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter]
     search_fields = ['project_name', 'project_code']
-    filterset_fields = ['status', 'company']
+    filterset_fields = ['status', 'company', 'priority', 'owner']
     company_field = 'company'
 
 
@@ -39,10 +42,52 @@ class TaskViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
 
         employee = getattr(user, 'employee_profile', None)
         if not employee:
-            # A logged-in user with no linked Employee record has no
-            # personal or team tasks to see.
             return qs.none()
 
         return qs.filter(
             Q(assigned_to=employee) | Q(team__members=employee)
         ).distinct()
+
+
+class MilestoneViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = Milestone.objects.all()
+    serializer_class = MilestoneSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['project', 'status']
+    company_field = 'project__company'
+
+
+class StakeholderViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = Stakeholder.objects.all()
+    serializer_class = StakeholderSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    search_fields = ['name', 'organization']
+    filterset_fields = ['project', 'influence', 'interest']
+    company_field = 'project__company'
+
+
+class RiskRegisterViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = RiskRegister.objects.all()
+    serializer_class = RiskRegisterSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    search_fields = ['title']
+    filterset_fields = ['project', 'status', 'category']
+    company_field = 'project__company'
+
+
+class IssueLogViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = IssueLog.objects.all()
+    serializer_class = IssueLogSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    search_fields = ['title']
+    filterset_fields = ['project', 'status', 'severity']
+    company_field = 'project__company'
+
+
+class ChangeRequestViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = ChangeRequest.objects.all()
+    serializer_class = ChangeRequestSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    search_fields = ['title']
+    filterset_fields = ['project', 'status']
+    company_field = 'project__company'

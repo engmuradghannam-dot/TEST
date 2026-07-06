@@ -21,7 +21,10 @@ from apps.hr.views import (
     LeaveRequestViewSet, PayrollViewSet,
 )
 from apps.crm.views import LeadViewSet, OpportunityViewSet
-from apps.projects.views import ProjectViewSet, TaskViewSet
+from apps.projects.views import (
+    ProjectViewSet, TaskViewSet, MilestoneViewSet, StakeholderViewSet,
+    RiskRegisterViewSet, IssueLogViewSet, ChangeRequestViewSet,
+)
 from apps.assets.views import AssetViewSet, AssetCategoryViewSet
 from apps.workflow.views import WorkflowViewSet
 
@@ -64,6 +67,11 @@ router.register(r'leads', LeadViewSet)
 router.register(r'opportunities', OpportunityViewSet)
 router.register(r'projects', ProjectViewSet)
 router.register(r'tasks', TaskViewSet)
+router.register(r'milestones', MilestoneViewSet)
+router.register(r'stakeholders', StakeholderViewSet)
+router.register(r'risks', RiskRegisterViewSet)
+router.register(r'issues', IssueLogViewSet)
+router.register(r'change-requests', ChangeRequestViewSet)
 router.register(r'assets', AssetViewSet)
 router.register(r'asset-categories', AssetCategoryViewSet)
 router.register(r'workflows', WorkflowViewSet)
