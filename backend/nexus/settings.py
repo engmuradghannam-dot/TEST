@@ -1,3 +1,16 @@
+
+import os
+
+def read_secret(secret_name, default=None):
+    """Read secret from Docker secrets or environment variable."""
+    # Try Docker secrets first
+    secret_path = f'/run/secrets/{secret_name}'
+    if os.path.exists(secret_path):
+        with open(secret_path, 'r') as f:
+            return f.read().strip()
+    # Fallback to env var
+    return os.environ.get(secret_name.upper(), default)
+
 """
 Nexus Framework - Django ERP Settings
 """

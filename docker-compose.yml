@@ -14,6 +14,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - nexus_network
 
   redis:
     image: redis:7-alpine
@@ -24,19 +26,28 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - nexus_network
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     command: >
-      sh -c "python manage.py migrate &&
-             python manage.py collectstatic --noinput &&
-             gunicorn nexus.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2 --timeout 60 --access-logfile - --error-logfile -"
+      sh -c "python /app/entrypoint.sh && 
+             gunicorn nexus.wsgi:application 
+             --bind 0.0.0.0:8000 
+             --workers 4 
+             --threads 2 
+             --timeout 60 
+             --access-logfile - 
+             --error-logfile - 
+             --preload"
     volumes:
       - ./backend:/app
       - static_volume:/app/staticfiles
       - media_volume:/app/media
+      - ./backend/logs:/app/logs
     environment:
       - DEBUG=0
       - SECRET_KEY=${SECRET_KEY:-production-secret-key-change-me}
@@ -50,20 +61,24 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - nexus_network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    restart: unless-stopped
 
   worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: celery -A nexus worker -l info --concurrency=2
+    command: celery -A nexus worker -l info --concurrency=2 --prefetch-multiplier=1
     volumes:
       - ./backend:/app
+      - media_volume:/app/media
     environment:
       - DEBUG=0
       - SECRET_KEY=${SECRET_KEY:-production-secret-key-change-me}
@@ -75,6 +90,8 @@ services:
       - db
       - redis
       - backend
+    networks:
+      - nexus_network
     restart: unless-stopped
 
   beat:
@@ -95,7 +112,28 @@ services:
       - db
       - redis
       - backend
+    networks:
+      - nexus_network
     restart: unless-stopped
+
+  # Frontend Builder - builds and exits
+  frontend-builder:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    volumes:
+      - ./frontend:/app
+      - static_volume:/app/dist
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=/api/v1
+    command: >
+      sh -c "npm ci && npm run build && cp -r dist/* /app/dist/"
+    networks:
+      - nexus_network
+    profiles:
+      - build
+    restart: "no"
 
   nginx:
     image: nginx:alpine
@@ -109,25 +147,16 @@ services:
       - media_volume:/var/www/media:ro
     depends_on:
       - backend
+    networks:
+      - nexus_network
     restart: unless-stopped
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    environment:
-      - VITE_API_URL=/api/v1
-    command: >
-      sh -c "npm run build &&
-             cp -r dist/* /var/www/static/ || true"
-    depends_on:
-      - backend
 
 volumes:
   postgres_data:
   redis_data:
   static_volume:
   media_volume:
+
+networks:
+  nexus_network:
+    driver: bridge
