@@ -5,7 +5,7 @@ import {
   Search, Filter, Grid, List, ChevronRight, Tag,
   DollarSign, Users, Clock, ArrowUpRight, Package
 } from 'lucide-react';
-import axios from 'axios';
+import api from '../lib/api';
 import toast from 'react-hot-toast';
 
 const categories = [
@@ -139,7 +139,7 @@ export default function PluginMarketplace() {
   const installPlugin = async (plugin) => {
     setIsInstalling(true);
     try {
-      await axios.post(`/api/ceos/plugins/registry/${plugin.id}/install/`);
+      await api.post(`/core/plugins/registry/${plugin.id}/install/`);
       setInstalledPlugins(prev => [...prev, plugin.id]);
       toast.success(`${plugin.name} installed successfully`);
     } catch (error) {

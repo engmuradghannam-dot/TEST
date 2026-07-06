@@ -5,7 +5,7 @@ import {
   Clock, GitPullRequest, GitMerge, RotateCcw, Zap, BarChart3,
   ChevronRight, Shield, Activity, ArrowUpRight, Filter
 } from 'lucide-react';
-import axios from 'axios';
+import api from '../lib/api';
 import toast from 'react-hot-toast';
 
 const mockImprovements = [
@@ -115,7 +115,7 @@ export default function SelfImprovementDashboard() {
   const runAnalysis = async () => {
     setIsAnalyzing(true);
     try {
-      const response = await axios.post('/api/ceos/system/improvements/analyze_system/');
+      const response = await api.post('/core/system/improvements/analyze_system/');
       toast.success('System analysis completed');
       // Would refresh improvements list
     } catch (error) {
@@ -127,7 +127,7 @@ export default function SelfImprovementDashboard() {
 
   const approveImprovement = async (id) => {
     try {
-      await axios.post(`/api/ceos/system/improvements/${id}/approve/`);
+      await api.post(`/core/system/improvements/${id}/approve/`);
       setImprovements(prev => prev.map(i => i.id === id ? { ...i, status: 'approved' } : i));
       toast.success('Improvement approved');
     } catch (error) {
@@ -137,7 +137,7 @@ export default function SelfImprovementDashboard() {
 
   const deployImprovement = async (id) => {
     try {
-      await axios.post(`/api/ceos/system/improvements/${id}/deploy/`);
+      await api.post(`/core/system/improvements/${id}/deploy/`);
       setImprovements(prev => prev.map(i => i.id === id ? { ...i, status: 'deployed' } : i));
       toast.success('Improvement deployed');
     } catch (error) {
@@ -147,7 +147,7 @@ export default function SelfImprovementDashboard() {
 
   const rollbackImprovement = async (id) => {
     try {
-      await axios.post(`/api/ceos/system/improvements/${id}/rollback/`);
+      await api.post(`/core/system/improvements/${id}/rollback/`);
       setImprovements(prev => prev.map(i => i.id === id ? { ...i, status: 'rolled_back' } : i));
       toast.success('Improvement rolled back');
     } catch (error) {

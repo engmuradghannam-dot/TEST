@@ -5,7 +5,7 @@ import {
   Play, Pause, RotateCcw, Activity, Clock, CheckCircle,
   AlertTriangle, Zap, BarChart3, RefreshCw, Send
 } from 'lucide-react';
-import axios from 'axios';
+import api from '../lib/api';
 import toast from 'react-hot-toast';
 
 const agentTypes = [
@@ -92,7 +92,7 @@ export default function AgentDashboard() {
   const dispatchTask = async (agentType, action, parameters = {}) => {
     setIsRunning(true);
     try {
-      const response = await axios.post('/api/ceos/ai/agents/dispatch/', {
+      const response = await api.post('/core/ai/agents/dispatch/', {
         agent_type: agentType,
         action: action,
         parameters: {
@@ -120,7 +120,7 @@ export default function AgentDashboard() {
   const broadcastTask = async (action, parameters = {}) => {
     setIsRunning(true);
     try {
-      const response = await axios.post('/api/ceos/ai/agents/broadcast/', {
+      const response = await api.post('/core/ai/agents/broadcast/', {
         action,
         parameters
       });

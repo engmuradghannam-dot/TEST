@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import axios from 'axios';
+import api from '../lib/api';
 
 // Node Types
 const nodeTypes = {
@@ -390,7 +390,7 @@ export default function VisualWorkflowBuilder() {
         }))
       };
 
-      await axios.post('/api/ceos/workflows/definitions/', workflowData);
+      await api.post('/core/workflows/definitions/', workflowData);
       toast.success('Workflow saved successfully');
     } catch (error) {
       toast.error('Failed to save workflow');
@@ -443,7 +443,7 @@ export default function VisualWorkflowBuilder() {
 
     setIsGenerating(true);
     try {
-      const response = await axios.post('/api/ceos/ai/workflow-generator/generate/', {
+      const response = await api.post('/core/ai/workflow-generator/generate/', {
         description: aiPrompt
       });
 
