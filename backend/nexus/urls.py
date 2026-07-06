@@ -34,6 +34,9 @@ urlpatterns = [
     path('api/projects/', include('apps.projects.urls')),
     path('api/assets/', include('apps.assets.urls')),
     path('api/workflow/', include('apps.workflow.urls')),
+    path('api/industries/', include('apps.industries.urls')),
+    path('api/compliance/', include('apps.compliance.urls')),
+    path('api/kpi/', include('apps.kpi.urls')),
     path('api/health/', include('nexus.api_urls')),
 ]
 

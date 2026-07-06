@@ -33,6 +33,9 @@ const menuItems = [
   { label: 'الحسابات', icon: Landmark, path: '/accounts' },
   { label: 'الميزانيات', icon: PiggyBank, path: '/budgets' },
   { label: 'التقارير', icon: BarChart3, path: '/reports' },
+  { label: 'القطاعات', icon: B2, path: '/industries' },
+  { label: 'الامتثال', icon: Shield, path: '/compliance' },
+  { label: 'مؤشرات الأداء', icon: Activity, path: '/kpi' },
   { label: 'الإعدادات', icon: Settings, path: '/settings' },
 ]
 
