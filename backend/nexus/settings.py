@@ -39,6 +39,9 @@ SHARED_APPS = [
     'apps.tenants',
     'apps.plugins',
     'apps.billing',
+    'apps.ai_engine',
+    'apps.observability',
+    'apps.self_improvement',
     'apps.core',
 ]
 
@@ -89,6 +92,10 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'apps.core.middleware.CurrentUserMiddleware',
+    'nexus.middleware.RequestLoggerMiddleware',
+    'nexus.middleware.ErrorHandlerMiddleware',
+    'nexus.middleware.APIAuthMiddleware',
+    'nexus.middleware.ValidationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
