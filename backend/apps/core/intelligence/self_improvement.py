@@ -12,8 +12,8 @@ from django.db import models
 from django.utils import timezone
 import uuid
 
-from apps.core.ai_brain import llm_core, rag_memory
-from apps.core.event_bus import event_bus, DomainEvent, EventTypes, EventPriority
+from apps.core.intelligence.ai_brain import llm_core, rag_memory
+from apps.core.runtime.event_bus import event_bus, DomainEvent, EventTypes, EventPriority
 
 logger = logging.getLogger(__name__)
 

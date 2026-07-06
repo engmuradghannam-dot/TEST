@@ -156,10 +156,20 @@ class TenantUser(AbstractUser):
     tenants = models.ManyToManyField(
         Tenant,
         through='TenantMembership',
+        through_fields=('user', 'tenant'),
         related_name='users',
         blank=True,
         verbose_name=_('Tenants')
     )
+
+    # Distinct reverse accessors: core.User is the tenant-schema user model,
+    # TenantUser is the public-schema user model - both extend AbstractUser.
+    groups = models.ManyToManyField(
+        'auth.Group', blank=True, related_name='tenant_users',
+        verbose_name=_('groups'))
+    user_permissions = models.ManyToManyField(
+        'auth.Permission', blank=True, related_name='tenant_users',
+        verbose_name=_('user permissions'))
 
     # Profile
     first_name = models.CharField(max_length=150, blank=True, verbose_name=_('First Name'))

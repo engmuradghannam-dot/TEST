@@ -2,6 +2,6 @@
 
 Infrastructure services consumed by domain apps. Must NOT import from
 apps.core.intelligence (dependency direction: intelligence -> runtime,
-never the reverse).
+never the reverse). Import submodules directly, e.g.:
+    from apps.core.runtime.event_bus import event_bus
 """
-from . import event_bus, state_machine, observability  # noqa: F401

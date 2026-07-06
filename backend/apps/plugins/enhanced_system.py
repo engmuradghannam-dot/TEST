@@ -155,10 +155,10 @@ class PluginRegistry(models.Model):
         return PluginManifest.from_dict(self.manifest)
 
 
-class TenantPlugin(models.Model):
+class TenantPluginInstall(models.Model):
     """Plugin activated for a specific tenant"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey('tenants.Tenant', on_delete=models.CASCADE, related_name='plugins')
+    tenant = models.ForeignKey('tenants.Tenant', on_delete=models.CASCADE, related_name='plugin_installs')
     plugin = models.ForeignKey(PluginRegistry, on_delete=models.CASCADE, related_name='tenant_installations')
 
     status = models.CharField(max_length=20, choices=[
@@ -188,7 +188,7 @@ class TenantPlugin(models.Model):
         return f"{self.plugin.name} on {self.tenant.name}"
 
 
-class PluginReview(models.Model):
+class PluginMarketReview(models.Model):
     """User reviews for marketplace plugins"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     plugin = models.ForeignKey(PluginRegistry, on_delete=models.CASCADE, related_name='reviews')
@@ -245,7 +245,7 @@ class DependencyResolver:
                 continue
 
             # Check if dependency is installed for tenant
-            installed = TenantPlugin.objects.filter(
+            installed = TenantPluginInstall.objects.filter(
                 tenant=tenant,
                 plugin__slug=dep_slug,
                 status__in=[PluginStatus.ACTIVE.value, PluginStatus.PENDING.value]
@@ -287,7 +287,7 @@ class DependencyResolver:
         conflicts = []
 
         # Check for duplicate functionality
-        installed = TenantPlugin.objects.filter(
+        installed = TenantPluginInstall.objects.filter(
             tenant=tenant,
             status=PluginStatus.ACTIVE.value
         ).select_related('plugin')
@@ -313,7 +313,7 @@ class PluginLifecycleManager:
     def install(self, plugin: PluginRegistry, tenant, config: Dict = None, user=None) -> Dict:
         """Install a plugin for a tenant"""
         # Check if already installed
-        existing = TenantPlugin.objects.filter(tenant=tenant, plugin=plugin).first()
+        existing = TenantPluginInstall.objects.filter(tenant=tenant, plugin=plugin).first()
         if existing:
             return {'success': False, 'error': 'Plugin already installed'}
 
@@ -328,7 +328,7 @@ class PluginLifecycleManager:
             return {'success': False, 'error': f'Conflicts: {", ".join(conflicts)}'}
 
         # Create tenant plugin
-        tenant_plugin = TenantPlugin.objects.create(
+        tenant_plugin = TenantPluginInstall.objects.create(
             tenant=tenant,
             plugin=plugin,
             status=PluginStatus.PENDING.value,
@@ -359,7 +359,7 @@ class PluginLifecycleManager:
             tenant_plugin.save()
             return {'success': False, 'error': str(e)}
 
-    def update(self, tenant_plugin: TenantPlugin, new_plugin: PluginRegistry, user=None) -> Dict:
+    def update(self, tenant_plugin: TenantPluginInstall, new_plugin: PluginRegistry, user=None) -> Dict:
         """Update a plugin to a new version"""
         if tenant_plugin.plugin == new_plugin:
             return {'success': False, 'error': 'Already on this version'}
@@ -400,7 +400,7 @@ class PluginLifecycleManager:
             tenant_plugin.save()
             return {'success': False, 'error': str(e)}
 
-    def uninstall(self, tenant_plugin: TenantPlugin, user=None) -> Dict:
+    def uninstall(self, tenant_plugin: TenantPluginInstall, user=None) -> Dict:
         """Uninstall a plugin from a tenant"""
         # Check if other plugins depend on this
         dependents = self._get_dependents(tenant_plugin.plugin, tenant_plugin.tenant)
@@ -428,7 +428,7 @@ class PluginLifecycleManager:
 
         return {'success': True}
 
-    def activate(self, tenant_plugin: TenantPlugin, user=None) -> Dict:
+    def activate(self, tenant_plugin: TenantPluginInstall, user=None) -> Dict:
         """Activate a plugin"""
         tenant_plugin.status = PluginStatus.ACTIVE.value
         tenant_plugin.activated_at = datetime.now()
@@ -444,7 +444,7 @@ class PluginLifecycleManager:
 
         return {'success': True}
 
-    def deactivate(self, tenant_plugin: TenantPlugin, user=None) -> Dict:
+    def deactivate(self, tenant_plugin: TenantPluginInstall, user=None) -> Dict:
         """Deactivate a plugin"""
         tenant_plugin.status = PluginStatus.INACTIVE.value
         tenant_plugin.deactivated_at = datetime.now()
@@ -460,7 +460,7 @@ class PluginLifecycleManager:
     def _get_dependents(self, plugin: PluginRegistry, tenant) -> List[str]:
         """Get plugins that depend on this plugin"""
         dependents = []
-        installed = TenantPlugin.objects.filter(
+        installed = TenantPluginInstall.objects.filter(
             tenant=tenant,
             status__in=[PluginStatus.ACTIVE.value, PluginStatus.PENDING.value]
         ).select_related('plugin')

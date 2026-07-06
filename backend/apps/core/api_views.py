@@ -40,7 +40,7 @@ from apps.core.self_improvement import (
     monitoring_layer, ai_analyzer, suggestion_engine, controlled_deployment
 )
 from apps.plugins.enhanced_system import (
-    PluginRegistry, TenantPlugin, PluginReview, PluginSandbox,
+    PluginRegistry, TenantPluginInstall, PluginMarketReview, PluginSandbox,
     PluginStatus, PluginLifecycleAction, plugin_lifecycle_manager
 )
 from apps.core.observability import (
@@ -666,7 +666,7 @@ class PluginRegistryViewSet(viewsets.ReadOnlyModelViewSet):
         if not rating or not (1 <= rating <= 5):
             return Response({'error': 'Rating must be 1-5'}, status=400)
 
-        review, created = PluginReview.objects.update_or_create(
+        review, created = PluginMarketReview.objects.update_or_create(
             plugin=plugin,
             user=request.user,
             defaults={
@@ -691,15 +691,15 @@ class PluginRegistryViewSet(viewsets.ReadOnlyModelViewSet):
 
 class TenantPluginViewSet(viewsets.ModelViewSet):
     """Manage tenant plugins"""
-    queryset = TenantPlugin.objects.all()
+    queryset = TenantPluginInstall.objects.all()
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['status', 'plugin']
 
     def get_queryset(self):
         tenant = getattr(self.request, 'tenant', None)
         if tenant:
-            return TenantPlugin.objects.filter(tenant=tenant)
-        return TenantPlugin.objects.none()
+            return TenantPluginInstall.objects.filter(tenant=tenant)
+        return TenantPluginInstall.objects.none()
 
     @action(detail=True, methods=['post'])
     def activate(self, request, pk=None):

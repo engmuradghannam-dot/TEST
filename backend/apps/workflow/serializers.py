@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Workflow, WorkflowState, WorkflowTransition
+from .models import Workflow, WorkflowState, WorkflowTransition, ApprovalStep, ApprovalRecord
 
 class WorkflowStateSerializer(serializers.ModelSerializer):
     class Meta:

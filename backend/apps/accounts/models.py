@@ -76,8 +76,23 @@ class JournalEntry(models.Model):
         """Applies this entry's amounts to the real account balances.
         Called exactly once, when the entry transitions to 'Submitted'
         (see JournalEntrySerializer.update). Supports both the simple
-        two-account shortcut and full multi-line postings."""
+        two-account shortcut and full multi-line postings.
+        Rejects postings into locked/closed fiscal periods."""
         from django.core.exceptions import ValidationError as DjangoValidationError
+        from apps.accounts.fiscal import FiscalPeriod
+
+        # fiscal-period gate (only when a fiscal calendar exists)
+        if FiscalPeriod.objects.filter(fiscal_year__company=self.company).exists():
+            FiscalPeriod.validate_posting(self.company, self.posting_date)
+
+        # double-entry integrity for multi-line postings
+        line_qs = self.lines.all()
+        if line_qs.exists():
+            td = sum(l.debit for l in line_qs)
+            tc = sum(l.credit for l in line_qs)
+            if td != tc:
+                raise DjangoValidationError(
+                    f"Unbalanced entry: debits {td} != credits {tc}")
 
         lines = list(self.lines.all())
         if lines:
@@ -143,3 +158,9 @@ class Budget(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.fiscal_year})"
+
+
+# Fiscal layer models (fiscal years/periods, currency, tax engine)
+from apps.accounts.fiscal import (  # noqa: E402,F401
+    FiscalYear, FiscalPeriod, Currency, ExchangeRate, TaxRule,
+)

@@ -23,7 +23,7 @@ from apps.core.self_improvement import (
     SystemImprovement, PerformanceMetric, ImprovementType
 )
 from apps.core.observability import metrics_collector, alert_manager, BusinessMetrics
-from apps.plugins.enhanced_system import PluginRegistry, TenantPlugin, plugin_lifecycle_manager
+from apps.plugins.enhanced_system import PluginRegistry, TenantPluginInstall, plugin_lifecycle_manager
 
 logger = logging.getLogger(__name__)
 
@@ -275,7 +275,7 @@ def check_and_alert():
 def plugin_install_task(tenant_plugin_id: str):
     """Async plugin installation"""
     try:
-        tp = TenantPlugin.objects.get(id=tenant_plugin_id)
+        tp = TenantPluginInstall.objects.get(id=tenant_plugin_id)
         result = plugin_lifecycle_manager.activate(tp)
         return result
     except Exception as e:
@@ -287,7 +287,7 @@ def plugin_install_task(tenant_plugin_id: str):
 def plugin_update_task(tenant_plugin_id: str, new_plugin_id: str):
     """Async plugin update"""
     try:
-        tp = TenantPlugin.objects.get(id=tenant_plugin_id)
+        tp = TenantPluginInstall.objects.get(id=tenant_plugin_id)
         new_plugin = PluginRegistry.objects.get(id=new_plugin_id)
         result = plugin_lifecycle_manager.update(tp, new_plugin)
         return result

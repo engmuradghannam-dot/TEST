@@ -14,7 +14,7 @@ from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from django.contrib.contenttypes.models import ContentType
 
-from apps.core.event_bus import event_bus, DomainEvent, EventTypes, EventPriority
+from apps.core.runtime.event_bus import event_bus, DomainEvent, EventTypes, EventPriority
 
 logger = logging.getLogger(__name__)
 

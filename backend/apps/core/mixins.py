@@ -137,3 +137,40 @@ class AuditUserMixin:
         super().initial(request, *args, **kwargs)
         from .threadlocal import set_current_user
         set_current_user(request.user if request.user and request.user.is_authenticated else None)
+
+
+class BranchScopedMixin:
+    """Row-level security one level below company: restricts the queryset
+    to the user's branch unless the user has the `<app>.view_all_branches`
+    permission or is a company admin. Stack AFTER CompanyScopedMixin:
+
+        class JournalEntryViewSet(CompanyScopedMixin, BranchScopedMixin, ...)
+    """
+
+    branch_field = 'branch'
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        model = qs.model
+        perm = f"{model._meta.app_label}.view_all_branches"
+        if user.is_superuser or user.has_perm(perm):
+            return qs
+        user_branch_id = getattr(user, 'branch_id', None)
+        if user_branch_id and self.branch_field in [
+                f.name for f in model._meta.fields]:
+            return qs.filter(**{f"{self.branch_field}_id": user_branch_id})
+        return qs
+
+
+def user_effective_permissions(user):
+    """Permission inheritance resolver: direct perms + group perms +
+    role-implied perms, deduplicated. Single source of truth for
+    'what can this user actually do'."""
+    if user.is_superuser:
+        from django.contrib.auth.models import Permission
+        return set(Permission.objects.values_list('codename', flat=True))
+    perms = set(user.user_permissions.values_list('codename', flat=True))
+    perms |= set(user.groups.values_list('permissions__codename', flat=True))
+    perms.discard(None)
+    return perms

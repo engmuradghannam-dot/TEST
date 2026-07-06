@@ -10,9 +10,9 @@ from django.db import models
 from django.utils import timezone
 import uuid
 
-from apps.core.ai_brain import llm_core, rag_memory, context_engine, AIConversation, AIPromptTemplate
-from apps.core.agent_layer import AgentOrchestrator, AgentTask, AgentAction, agent_orchestrator
-from apps.core.event_bus import event_bus, DomainEvent, EventTypes, EventPriority
+from apps.core.intelligence.ai_brain import llm_core, rag_memory, context_engine, AIConversation, AIPromptTemplate
+from apps.core.intelligence.agent_layer import AgentOrchestrator, AgentTask, AgentAction, agent_orchestrator
+from apps.core.runtime.event_bus import event_bus, DomainEvent, EventTypes, EventPriority
 
 logger = logging.getLogger(__name__)
 

@@ -184,3 +184,11 @@ class AuditLogManager:
         if x_forwarded_for:
             return x_forwarded_for.split(',')[0].strip()
         return request.META.get('REMOTE_ADDR')
+
+
+def connect_signals():
+    """Wire audit signal receivers. Called from CoreConfig.ready().
+    Receivers defined with @receiver decorators in this module are
+    connected on import; this function exists as the explicit hook
+    and is safe to call multiple times."""
+    return True

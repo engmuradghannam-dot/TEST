@@ -195,7 +195,7 @@ REST_FRAMEWORK = {
         'anon': '30/minute',
         'user': '300/minute',
     },
-    'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 # ───────────────────────────────────────────
