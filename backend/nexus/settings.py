@@ -89,6 +89,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'apps.core.middleware.CurrentUserMiddleware',
+    'nexus.gateway.GatewayMiddleware',
     'nexus.middleware.RequestLoggerMiddleware',
     'nexus.middleware.ErrorHandlerMiddleware',
     'nexus.middleware.APIAuthMiddleware',

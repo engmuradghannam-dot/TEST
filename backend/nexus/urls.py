@@ -1,11 +1,25 @@
+"""Root URL configuration.
+
+All API traffic enters through the gateway at /api/v1/ (see nexus.gateway).
+Legacy unversioned paths remain mounted for backward compatibility and
+answer with Deprecation headers; remove them once clients migrate.
+"""
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
+from nexus.gateway import build_urlpatterns
+
 urlpatterns = [
-    path('api/ceos/', include('apps.core.urls')),  # CE-ERP OS APIs
     path('admin/', admin.site.urls),
+
+    # ── API Gateway: the single public entry point ──────────────
+    path('api/v1/', include((build_urlpatterns(), 'v1'))),
+    path('api/v1/auth/', include('rest_framework.urls')),
+    path('api/v1/', include('nexus.api_urls')),   # main DRF router + token auth
+
+    # ── Legacy mounts (deprecated — Deprecation header attached) ─
     path('api/tenants/', include('apps.tenants.urls')),
     path('api/billing/', include('apps.billing.urls')),
     path('api/plugins/', include('apps.plugins.urls')),
