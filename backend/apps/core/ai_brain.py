@@ -474,7 +474,7 @@ class AIPromptTemplate(models.Model):
         user_prompt = self.user_prompt_template
 
         for key, value in variables.items():
-            placeholder = f"{{{{{key}}}}"
+            placeholder = "{{" + key + "}}"
             sys_prompt = sys_prompt.replace(placeholder, str(value))
             user_prompt = user_prompt.replace(placeholder, str(value))
 
