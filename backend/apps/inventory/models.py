@@ -1,4 +1,5 @@
-from django.db import models
+from django.db import models, transaction
+from django.core.exceptions import ValidationError as DjangoValidationError
 from apps.core.models import Company, Warehouse, Branch
 
 
@@ -135,6 +136,25 @@ class StockReconciliation(models.Model):
     @property
     def total_difference_value(self):
         return sum((i.total_difference_value for i in self.items.all()), 0)
+
+    def apply_adjustments(self):
+        """Called when the reconciliation transitions to 'Submitted'.
+        Creates a Receipt/Issue StockEntry per line to bring actual system
+        stock in line with the counted quantity."""
+        lines = list(self.items.all())
+        if not lines:
+            raise DjangoValidationError("Cannot submit a stock reconciliation with no counted items.")
+        with transaction.atomic():
+            for line in lines:
+                diff = line.difference
+                if diff == 0:
+                    continue
+                StockEntry.objects.create(
+                    company=self.company, branch=self.branch, warehouse=self.warehouse,
+                    item=line.item, entry_type='Receipt' if diff > 0 else 'Issue',
+                    quantity=abs(diff), rate=line.unit_cost,
+                    reference=f"Stock Reconciliation SR-{self.id}",
+                )
 
     def __str__(self):
         return f"SR-{self.id} - {self.warehouse}"

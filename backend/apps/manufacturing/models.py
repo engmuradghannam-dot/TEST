@@ -1,6 +1,7 @@
-from django.db import models
+from django.db import models, transaction
+from django.core.exceptions import ValidationError as DjangoValidationError
 from apps.core.models import Company, Warehouse, Branch
-from apps.inventory.models import Item
+from apps.inventory.models import Item, StockEntry
 
 
 class BOM(models.Model):
@@ -57,6 +58,44 @@ class WorkOrder(models.Model):
     warehouse = models.ForeignKey(Warehouse, on_delete=models.SET_NULL, null=True, blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def complete_production(self):
+        """Called when the WorkOrder transitions to 'Completed'. Validates
+        raw-material availability for the full BOM FIRST (all-or-nothing),
+        then issues raw materials and receipts the finished good."""
+        if not self.bom:
+            raise DjangoValidationError("Cannot complete a work order without a BOM.")
+        if not self.warehouse:
+            raise DjangoValidationError("Cannot complete a work order without a warehouse.")
+        bom_items = list(self.bom.items.all())
+        if not bom_items:
+            raise DjangoValidationError("The linked BOM has no raw materials defined.")
+
+        shortages = []
+        requirements = []
+        for bom_item in bom_items:
+            required = bom_item.qty * self.qty_to_produce
+            available = bom_item.item.stock_quantity
+            requirements.append((bom_item, required))
+            if available < required:
+                shortages.append(f"{bom_item.item.item_code} (available {available}, need {required})")
+        if shortages:
+            raise DjangoValidationError(f"Insufficient raw materials to complete production: {', '.join(shortages)}")
+
+        with transaction.atomic():
+            for bom_item, required in requirements:
+                StockEntry.objects.create(
+                    company=self.company, branch=self.branch, warehouse=self.warehouse,
+                    item=bom_item.item, entry_type='Issue', quantity=required, rate=bom_item.rate,
+                    reference=f"WO {self.wo_number} consumption",
+                )
+            StockEntry.objects.create(
+                company=self.company, branch=self.branch, warehouse=self.warehouse,
+                item=self.item_to_manufacture, entry_type='Receipt', quantity=self.qty_to_produce,
+                rate=(self.actual_cost / self.qty_to_produce) if self.qty_to_produce else 0,
+                reference=f"WO {self.wo_number} production",
+            )
+            WorkOrder.objects.filter(pk=self.pk).update(produced_qty=self.qty_to_produce)
 
     def __str__(self):
         return self.wo_number

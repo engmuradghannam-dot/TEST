@@ -1,5 +1,17 @@
 from rest_framework import serializers
+from apps.core.workflow import validate_transition
 from .models import Account, JournalEntry, JournalEntryLine, CostCenter, Budget
+
+JOURNAL_TRANSITIONS = {
+    'Draft': {'Submitted'},
+    'Submitted': set(),
+}
+
+BUDGET_TRANSITIONS = {
+    'Draft': {'Active', 'Closed'},
+    'Active': {'Closed'},
+    'Closed': set(),
+}
 
 class AccountSerializer(serializers.ModelSerializer):
     class Meta:
@@ -37,6 +49,9 @@ class JournalEntrySerializer(serializers.ModelSerializer):
                     )
             elif not amount or amount <= 0:
                 raise serializers.ValidationError("Amount must be greater than zero to submit this entry.")
+
+        if self.instance and status and status != self.instance.status:
+            validate_transition(JOURNAL_TRANSITIONS, self.instance.status, status)
         return data
 
 class CostCenterSerializer(serializers.ModelSerializer):
@@ -50,3 +65,14 @@ class BudgetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Budget
         fields = '__all__'
+
+    def validate(self, data):
+        start = data.get('start_date', getattr(self.instance, 'start_date', None))
+        end = data.get('end_date', getattr(self.instance, 'end_date', None))
+        if start and end and end < start:
+            raise serializers.ValidationError("End date cannot be before start date.")
+
+        new_status = data.get('status')
+        if self.instance and new_status and new_status != self.instance.status:
+            validate_transition(BUDGET_TRANSITIONS, self.instance.status, new_status)
+        return data

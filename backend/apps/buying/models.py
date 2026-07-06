@@ -1,5 +1,6 @@
-from django.db import models
+from django.db import models, transaction
 from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError as DjangoValidationError
 from apps.core.models import Company, Warehouse, Branch
 from apps.inventory.models import Item
 
@@ -88,6 +89,25 @@ class PurchaseOrder(models.Model):
         PurchaseOrder.objects.filter(pk=self.pk).update(
             total_qty=self.total_qty, total_amount=self.total_amount, grand_total=self.grand_total
         )
+
+    def receive_stock(self):
+        """Called when the PO transitions to 'Received'. Creates a Receipt
+        StockEntry for every line item and marks them fully received."""
+        from apps.inventory.models import StockEntry
+        if not self.warehouse:
+            raise DjangoValidationError("Cannot mark a purchase order as Received without a warehouse set.")
+        items = list(self.items.all())
+        if not items:
+            raise DjangoValidationError("Cannot receive a purchase order with no line items.")
+        with transaction.atomic():
+            for line in items:
+                StockEntry.objects.create(
+                    company=self.company, branch=self.branch, warehouse=self.warehouse,
+                    item=line.item, entry_type='Receipt', quantity=line.qty, rate=line.rate,
+                    reference=f"PO {self.po_number}",
+                )
+                line.received_qty = line.qty
+                PurchaseOrderItem.objects.filter(pk=line.pk).update(received_qty=line.qty)
 
     def __str__(self):
         return self.po_number

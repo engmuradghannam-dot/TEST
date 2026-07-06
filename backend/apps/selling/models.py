@@ -1,5 +1,6 @@
-from django.db import models
+from django.db import models, transaction
 from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError as DjangoValidationError
 from apps.core.models import Company, Warehouse, Branch
 from apps.inventory.models import Item
 from apps.buying.models import PAYMENT_TERMS, PAYMENT_METHODS
@@ -81,6 +82,32 @@ class SalesOrder(models.Model):
         SalesOrder.objects.filter(pk=self.pk).update(
             total_qty=self.total_qty, total_amount=self.total_amount, grand_total=self.grand_total
         )
+
+    def deliver_stock(self):
+        """Called when the SO transitions to 'Delivered'. Validates enough
+        stock exists for every line BEFORE issuing anything (all-or-nothing),
+        then creates an Issue StockEntry per line."""
+        from apps.inventory.models import StockEntry
+        if not self.warehouse:
+            raise DjangoValidationError("Cannot mark a sales order as Delivered without a warehouse set.")
+        items = list(self.items.all())
+        if not items:
+            raise DjangoValidationError("Cannot deliver a sales order with no line items.")
+        shortages = []
+        for line in items:
+            available = line.item.stock_quantity
+            if available < line.qty:
+                shortages.append(f"{line.item.item_code} (available {available}, need {line.qty})")
+        if shortages:
+            raise DjangoValidationError(f"Insufficient stock to deliver: {', '.join(shortages)}")
+        with transaction.atomic():
+            for line in items:
+                StockEntry.objects.create(
+                    company=self.company, branch=self.branch, warehouse=self.warehouse,
+                    item=line.item, entry_type='Issue', quantity=line.qty, rate=line.rate,
+                    reference=f"SO {self.so_number}",
+                )
+                SalesOrderItem.objects.filter(pk=line.pk).update(delivered_qty=line.qty)
 
     def __str__(self):
         return self.so_number
