@@ -53,3 +53,18 @@ services:
 
 volumes:
   pgdata:
+  worker:
+    build: ./backend
+    command: celery -A nexus worker -l info
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - db
+      - redis
+    environment:
+      - DEBUG=1
+      - SECRET_KEY=dev-secret-key
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/nexus
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0

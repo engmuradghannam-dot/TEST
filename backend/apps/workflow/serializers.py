@@ -17,3 +17,22 @@ class WorkflowSerializer(serializers.ModelSerializer):
     class Meta:
         model = Workflow
         fields = '__all__'
+
+
+class ApprovalStepSerializer(serializers.ModelSerializer):
+    approver_name = serializers.CharField(source='approver.email', read_only=True, default=None)
+
+    class Meta:
+        model = ApprovalStep
+        fields = '__all__'
+
+
+class ApprovalRecordSerializer(serializers.ModelSerializer):
+    step_name = serializers.CharField(source='step.name', read_only=True)
+    requested_by_name = serializers.CharField(source='requested_by.email', read_only=True)
+    approver_name = serializers.CharField(source='approver.email', read_only=True, default=None)
+    is_overdue = serializers.ReadOnlyField()
+
+    class Meta:
+        model = ApprovalRecord
+        fields = '__all__'

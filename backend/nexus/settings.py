@@ -204,3 +204,6 @@ else:
     EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
     EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
     EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
+
+# Database Routers for multi-tenancy and module separation
+DATABASE_ROUTERS = ['nexus.db_router.TenantRouter']
