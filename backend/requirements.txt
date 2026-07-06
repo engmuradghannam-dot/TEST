@@ -79,8 +79,6 @@ ipython>=8.18.0
 # AI Engine / RAG
 chromadb>=0.5
 requests>=2.31
-# Plugin sandbox
-RestrictedPython>=7.0
 # Observability
 opentelemetry-sdk>=1.25
 opentelemetry-exporter-otlp>=1.25

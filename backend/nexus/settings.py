@@ -39,9 +39,6 @@ SHARED_APPS = [
     'apps.tenants',
     'apps.plugins',
     'apps.billing',
-    'apps.ai_engine',
-    'apps.observability',
-    'apps.self_improvement',
     'apps.core',
 ]
 

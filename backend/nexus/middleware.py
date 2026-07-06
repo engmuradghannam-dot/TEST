@@ -30,9 +30,9 @@ class RequestLoggerMiddleware:
         )
         response["X-Request-ID"] = request.request_id
         try:
-            from apps.observability.metrics_collector import collector
             if response.status_code >= 500:
-                collector.increment("http.5xx.count", path=request.path)
+                from apps.core.observability import metrics_collector
+                metrics_collector.counter("http.5xx.count", 1, {"path": request.path})
         except Exception:
             pass
         return response
