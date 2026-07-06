@@ -4,6 +4,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = [
+    path('api/ceos/', include('apps.core.urls')),  # CE-ERP OS APIs
     path('admin/', admin.site.urls),
     path('api/tenants/', include('apps.tenants.urls')),
     path('api/billing/', include('apps.billing.urls')),

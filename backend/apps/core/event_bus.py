@@ -1,123 +1,290 @@
-"""Event Bus on Redis: Pub/Sub + Streams + Consumer Groups + Delayed Events.
-
-- publish():            fire-and-forget pub/sub broadcast
-- emit():               durable event via Redis Streams (XADD)
-- consume():            consumer-group processing loop with ack + retry
-- schedule():           delayed events via sorted set, promoted by pump_delayed()
+"""
+Nexus Event Bus - Redis-based Event-Driven Architecture
+Supports: pub/sub, streams, delayed events, event persistence
 """
 import json
 import logging
-import time
 import uuid
-
+from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional, Callable
+from dataclasses import dataclass, asdict
+from enum import Enum
 import redis
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-STREAM = "nexus:events"
-DELAYED_ZSET = "nexus:events:delayed"
-CHANNEL_PREFIX = "nexus:pubsub:"
+
+class EventPriority(Enum):
+    CRITICAL = 0
+    HIGH = 1
+    NORMAL = 2
+    LOW = 3
 
 
-def _client() -> redis.Redis:
-    return redis.Redis.from_url(
-        getattr(settings, "REDIS_URL", "redis://localhost:6379/0"),
-        decode_responses=True,
-    )
+@dataclass
+class DomainEvent:
+    """Base class for all domain events"""
+    event_id: str
+    event_type: str
+    aggregate_type: str
+    aggregate_id: str
+    tenant_id: str
+    payload: Dict[str, Any]
+    metadata: Dict[str, Any]
+    timestamp: str
+    priority: EventPriority = EventPriority.NORMAL
+    correlation_id: Optional[str] = None
+    causation_id: Optional[str] = None
+
+    @classmethod
+    def create(cls, event_type: str, aggregate_type: str, aggregate_id: str,
+                 tenant_id: str, payload: Dict, priority: EventPriority = EventPriority.NORMAL,
+                 correlation_id: Optional[str] = None, causation_id: Optional[str] = None):
+        return cls(
+            event_id=str(uuid.uuid4()),
+            event_type=event_type,
+            aggregate_type=aggregate_type,
+            aggregate_id=aggregate_id,
+            tenant_id=tenant_id,
+            payload=payload,
+            metadata={
+                'source': 'nexus-erp',
+                'version': '1.0',
+                'environment': settings.DEBUG and 'development' or 'production'
+            },
+            timestamp=datetime.utcnow().isoformat(),
+            priority=priority,
+            correlation_id=correlation_id or str(uuid.uuid4()),
+            causation_id=causation_id
+        )
+
+    def to_dict(self):
+        data = asdict(self)
+        data['priority'] = self.priority.value
+        return data
+
+    def to_json(self):
+        return json.dumps(self.to_dict())
 
 
 class EventBus:
-    def __init__(self, client: redis.Redis | None = None):
-        self.r = client or _client()
+    """Redis-based Event Bus with pub/sub and streams support"""
 
-    # ── Pub/Sub (ephemeral broadcast) ──────────────────────────────
-    def publish(self, channel: str, payload: dict):
-        self.r.publish(CHANNEL_PREFIX + channel, json.dumps(payload, default=str))
+    def __init__(self):
+        self._redis = None
+        self._subscribers: Dict[str, List[Callable]] = {}
+        self._handlers: Dict[str, List[Callable]] = {}
 
-    def subscribe(self, channel: str):
-        ps = self.r.pubsub(ignore_subscribe_messages=True)
-        ps.subscribe(CHANNEL_PREFIX + channel)
-        return ps
+    @property
+    def redis(self):
+        if self._redis is None:
+            self._redis = redis.from_url(
+                getattr(settings, 'REDIS_URL', 'redis://localhost:6379/0'),
+                decode_responses=True
+            )
+        return self._redis
 
-    # ── Streams (durable events) ───────────────────────────────────
-    def emit(self, event_type: str, payload: dict, company_id: int | None = None) -> str:
-        entry = {
-            "id": uuid.uuid4().hex,
-            "type": event_type,
-            "company_id": str(company_id or ""),
-            "payload": json.dumps(payload, default=str),
-            "ts": str(time.time()),
-        }
-        msg_id = self.r.xadd(STREAM, entry, maxlen=100_000, approximate=True)
-        logger.debug("event emitted type=%s id=%s", event_type, msg_id)
-        return msg_id
-
-    def ensure_group(self, group: str):
+    def publish(self, event: DomainEvent, delay_seconds: int = 0) -> str:
+        """Publish event to bus. Supports delayed delivery."""
         try:
-            self.r.xgroup_create(STREAM, group, id="0", mkstream=True)
+            event_data = event.to_json()
+            stream_key = f"nexus:events:{event.aggregate_type}"
+
+            if delay_seconds > 0:
+                # Delayed event - use sorted set
+                score = (datetime.utcnow() + timedelta(seconds=delay_seconds)).timestamp()
+                self.redis.zadd("nexus:events:delayed", {event_data: score})
+                logger.info(f"Event {event.event_id} scheduled for delay {delay_seconds}s")
+            else:
+                # Immediate publish to stream
+                self.redis.xadd(stream_key, {"data": event_data})
+                # Also publish to pub/sub for real-time subscribers
+                self.redis.publish(f"nexus:channel:{event.event_type}", event_data)
+
+            # Persist to event store
+            self.redis.xadd("nexus:events:all", {"data": event_data})
+
+            logger.info(f"Event published: {event.event_type} -> {event.aggregate_id}")
+            return event.event_id
+        except Exception as e:
+            logger.error(f"Failed to publish event: {e}")
+            raise
+
+    def subscribe(self, event_type: str, handler: Callable):
+        """Subscribe to event type"""
+        if event_type not in self._subscribers:
+            self._subscribers[event_type] = []
+        self._subscribers[event_type].append(handler)
+        logger.info(f"Handler subscribed to {event_type}")
+
+    def register_handler(self, event_type: str, handler: Callable):
+        """Register persistent handler for event type"""
+        if event_type not in self._handlers:
+            self._handlers[event_type] = []
+        self._handlers[event_type].append(handler)
+
+    def process_delayed_events(self):
+        """Process events that have reached their delivery time"""
+        now = datetime.utcnow().timestamp()
+        events = self.redis.zrangebyscore("nexus:events:delayed", 0, now)
+        for event_data in events:
+            try:
+                event_dict = json.loads(event_data)
+                event = DomainEvent(**event_dict)
+                self.publish(event)
+                self.redis.zrem("nexus:events:delayed", event_data)
+            except Exception as e:
+                logger.error(f"Failed to process delayed event: {e}")
+
+    def read_stream(self, stream_key: str, last_id: str = "0") -> List[Dict]:
+        """Read events from stream"""
+        messages = self.redis.xread({stream_key: last_id}, block=1000, count=100)
+        events = []
+        for stream_name, msgs in messages:
+            for msg_id, msg_data in msgs:
+                events.append({
+                    'id': msg_id,
+                    'data': json.loads(msg_data.get('data', '{}'))
+                })
+        return events
+
+    def get_event_store(self, aggregate_type: str, aggregate_id: str, limit: int = 100) -> List[Dict]:
+        """Get all events for an aggregate (event sourcing)"""
+        stream_key = f"nexus:events:{aggregate_type}"
+        messages = self.redis.xrevrange(stream_key, count=limit)
+        events = []
+        for msg_id, msg_data in messages:
+            data = json.loads(msg_data.get('data', '{}'))
+            if data.get('aggregate_id') == aggregate_id:
+                events.append(data)
+        return list(reversed(events))
+
+    def create_consumer_group(self, stream_key: str, group_name: str):
+        """Create consumer group for stream processing"""
+        try:
+            self.redis.xgroup_create(stream_key, group_name, id="0", mkstream=True)
         except redis.ResponseError as e:
-            if "BUSYGROUP" not in str(e):
+            if "already exists" not in str(e):
                 raise
 
-    def consume(self, group: str, consumer: str, handler,
-                block_ms: int = 5000, batch: int = 32, max_deliveries: int = 5):
-        """Blocking consumer loop. handler(event_dict) raising -> retried;
-        after max_deliveries the event is dead-lettered."""
-        self.ensure_group(group)
-        while True:
-            resp = self.r.xreadgroup(group, consumer, {STREAM: ">"},
-                                     count=batch, block=block_ms)
-            if not resp:
-                self._reclaim_stale(group, consumer, handler, max_deliveries)
-                continue
-            for _, messages in resp:
-                for msg_id, fields in messages:
-                    self._process(group, msg_id, fields, handler, max_deliveries)
+    def consume_group(self, stream_key: str, group_name: str, consumer_name: str,
+                      count: int = 10, block: int = 5000) -> List[Dict]:
+        """Consume events from consumer group"""
+        messages = self.redis.xreadgroup(
+            group_name, consumer_name, {stream_key: ">"},
+            count=count, block=block
+        )
+        events = []
+        for stream_name, msgs in messages:
+            for msg_id, msg_data in msgs:
+                events.append({
+                    'id': msg_id,
+                    'data': json.loads(msg_data.get('data', '{}'))
+                })
+        return events
 
-    def _process(self, group, msg_id, fields, handler, max_deliveries):
-        try:
-            event = {**fields, "payload": json.loads(fields.get("payload", "{}"))}
-            handler(event)
-            self.r.xack(STREAM, group, msg_id)
-        except Exception as exc:  # noqa: BLE001
-            logger.error("event %s handler failed: %s", msg_id, exc)
-
-    def _reclaim_stale(self, group, consumer, handler, max_deliveries,
-                       min_idle_ms: int = 60_000):
-        pending = self.r.xpending_range(STREAM, group, "-", "+", count=32)
-        for p in pending:
-            if p["times_delivered"] >= max_deliveries:
-                self.r.xadd(STREAM + ":dead", {"orig_id": p["message_id"]})
-                self.r.xack(STREAM, group, p["message_id"])
-                logger.error("event %s dead-lettered after %s deliveries",
-                             p["message_id"], p["times_delivered"])
-            elif p["time_since_delivered"] >= min_idle_ms:
-                claimed = self.r.xclaim(STREAM, group, consumer,
-                                        min_idle_ms, [p["message_id"]])
-                for msg_id, fields in claimed:
-                    self._process(group, msg_id, fields, handler, max_deliveries)
-
-    # ── Delayed events ─────────────────────────────────────────────
-    def schedule(self, event_type: str, payload: dict, delay_seconds: float,
-                 company_id: int | None = None) -> str:
-        eid = uuid.uuid4().hex
-        body = json.dumps({"id": eid, "type": event_type,
-                           "company_id": company_id, "payload": payload}, default=str)
-        self.r.zadd(DELAYED_ZSET, {body: time.time() + delay_seconds})
-        return eid
-
-    def pump_delayed(self) -> int:
-        """Promote due delayed events onto the stream. Call from Celery beat."""
-        now = time.time()
-        due = self.r.zrangebyscore(DELAYED_ZSET, "-inf", now, start=0, num=100)
-        moved = 0
-        for body in due:
-            if self.r.zrem(DELAYED_ZSET, body):  # atomic claim
-                ev = json.loads(body)
-                self.emit(ev["type"], ev["payload"], ev.get("company_id"))
-                moved += 1
-        return moved
+    def acknowledge(self, stream_key: str, group_name: str, msg_id: str):
+        """Acknowledge message processing"""
+        self.redis.xack(stream_key, group_name, msg_id)
 
 
-bus = EventBus()
+# Global event bus instance
+event_bus = EventBus()
+
+
+# ============================================================
+# Event Types Registry
+# ============================================================
+
+class EventTypes:
+    # Workflow Events
+    WORKFLOW_STARTED = "workflow.started"
+    WORKFLOW_COMPLETED = "workflow.completed"
+    WORKFLOW_FAILED = "workflow.failed"
+    WORKFLOW_STEP_EXECUTED = "workflow.step.executed"
+    WORKFLOW_APPROVAL_REQUIRED = "workflow.approval.required"
+    WORKFLOW_APPROVAL_GRANTED = "workflow.approval.granted"
+    WORKFLOW_APPROVAL_REJECTED = "workflow.approval.rejected"
+
+    # State Machine Events
+    STATE_TRANSITIONED = "state.transitioned"
+    STATE_TRANSITION_FAILED = "state.transition.failed"
+
+    # Business Events
+    INVOICE_CREATED = "invoice.created"
+    INVOICE_PAID = "invoice.paid"
+    INVOICE_OVERDUE = "invoice.overdue"
+    PURCHASE_ORDER_CREATED = "po.created"
+    PURCHASE_ORDER_APPROVED = "po.approved"
+    SALES_ORDER_CREATED = "so.created"
+    SALES_ORDER_SHIPPED = "so.shipped"
+    INVENTORY_LOW_STOCK = "inventory.low_stock"
+    INVENTORY_REORDER_TRIGGERED = "inventory.reorder_triggered"
+    EMPLOYEE_ONBOARDED = "hr.employee.onboarded"
+    LEAVE_REQUESTED = "hr.leave.requested"
+    LEAVE_APPROVED = "hr.leave.approved"
+
+    # AI Events
+    AI_PREDICTION_MADE = "ai.prediction.made"
+    AI_ANOMALY_DETECTED = "ai.anomaly.detected"
+    AI_SUGGESTION_GENERATED = "ai.suggestion.generated"
+    AI_WORKFLOW_GENERATED = "ai.workflow.generated"
+
+    # Plugin Events
+    PLUGIN_INSTALLED = "plugin.installed"
+    PLUGIN_UPDATED = "plugin.updated"
+    PLUGIN_UNINSTALLED = "plugin.uninstalled"
+    PLUGIN_ACTIVATED = "plugin.activated"
+
+    # System Events
+    USER_LOGIN = "user.login"
+    USER_LOGOUT = "user.logout"
+    TENANT_CREATED = "tenant.created"
+    TENANT_SUSPENDED = "tenant.suspended"
+    ERROR_OCCURRED = "system.error"
+    METRIC_COLLECTED = "system.metric"
+
+
+# ─────────────────────────────────────────────────────────────────
+# Compatibility adapter: simple emit/schedule/publish API used by
+# apps.plugins.lifecycle, apps.self_improvement.deployment and
+# apps.observability.alert_manager. Wraps the DomainEvent-based bus.
+# ─────────────────────────────────────────────────────────────────
+class _SimpleBusAdapter:
+    """Thin facade over `event_bus` for callers that just want
+    bus.emit("type", {...}) without constructing DomainEvent."""
+
+    def emit(self, event_type: str, payload: dict,
+             company_id: int | None = None) -> str:
+        event = DomainEvent.create(
+            event_type=event_type,
+            aggregate_type=payload.get("aggregate_type", "system"),
+            aggregate_id=str(payload.get("aggregate_id",
+                                         company_id or "global")),
+            tenant_id=str(company_id or "global"),
+            payload=payload,
+        )
+        return event_bus.publish(event)
+
+    def schedule(self, event_type: str, payload: dict,
+                 delay_seconds: float, company_id: int | None = None) -> str:
+        event = DomainEvent.create(
+            event_type=event_type,
+            aggregate_type=payload.get("aggregate_type", "system"),
+            aggregate_id=str(payload.get("aggregate_id",
+                                         company_id or "global")),
+            tenant_id=str(company_id or "global"),
+            payload=payload,
+        )
+        return event_bus.publish(event, delay_seconds=int(delay_seconds))
+
+    def publish(self, channel: str, payload: dict):
+        event = DomainEvent.create(
+            event_type=channel, aggregate_type="broadcast",
+            aggregate_id="global", tenant_id="global", payload=payload,
+        )
+        return event_bus.publish(event)
+
+
+bus = _SimpleBusAdapter()
