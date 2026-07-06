@@ -1,18 +1,8 @@
-
 import os
-
-def read_secret(secret_name, default=None):
-    """Read secret from Docker secrets or environment variable."""
-    # Try Docker secrets first
-    secret_path = f'/run/secrets/{secret_name}'
-    if os.path.exists(secret_path):
-        with open(secret_path, 'r') as f:
-            return f.read().strip()
-    # Fallback to env var
-    return os.environ.get(secret_name.upper(), default)
 
 """
 Nexus Framework - Django ERP Settings
+Multi-tenant SaaS Architecture with django-tenants
 """
 import os
 from pathlib import Path
@@ -29,28 +19,11 @@ if not DEBUG and SECRET_KEY == _INSECURE_DEFAULT_KEY:
         'Set the SECRET_KEY environment variable before deploying to production.'
     )
 
-# In production, set ALLOWED_HOSTS to a comma-separated list of real domains,
-# e.g. ALLOWED_HOSTS=app.wassel.sa,api.wassel.sa
-_allowed_hosts_env = os.getenv('ALLOWED_HOSTS', '')
-if _allowed_hosts_env:
-    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()]
-elif DEBUG:
-    ALLOWED_HOSTS = ['*']
-else:
-    raise RuntimeError(
-        'Refusing to start with DEBUG=False and no ALLOWED_HOSTS set. '
-        'Set the ALLOWED_HOSTS environment variable (comma-separated hostnames) before deploying.'
-    )
-
-if not DEBUG:
-    SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True').lower() == 'true'
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-
-INSTALLED_APPS = [
+# ───────────────────────────────────────────
+# MULTI-TENANCY CONFIGURATION (django-tenants)
+# ───────────────────────────────────────────
+SHARED_APPS = [
+    'django_tenants',  # Must be first
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -62,7 +35,24 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_filters',
     'guardian',
-    # Nexus Apps
+    # Public schema apps (shared across all tenants)
+    'apps.tenants',
+    'apps.plugins',
+    'apps.billing',
+    'apps.core',
+]
+
+TENANT_APPS = [
+    'django.contrib.contenttypes',
+    'django.contrib.auth',
+    'django.contrib.admin',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'rest_framework',
+    'rest_framework.authtoken',
+    'django_filters',
+    'guardian',
+    # Tenant-specific apps
     'apps.core',
     'apps.accounts',
     'apps.inventory',
@@ -76,9 +66,24 @@ INSTALLED_APPS = [
     'apps.workflow',
 ]
 
+INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
+
+# Tenant configuration
+TENANT_MODEL = "tenants.Tenant"  # app.Model
+TENANT_DOMAIN_MODEL = "tenants.Domain"  # app.Model
+PUBLIC_SCHEMA_NAME = os.getenv('PUBLIC_SCHEMA_NAME', 'public')
+
+# ───────────────────────────────────────────
+# MIDDLEWARE
+# ───────────────────────────────────────────
 MIDDLEWARE = [
+    'django_tenants.middleware.main.TenantMainMiddleware',
+    'apps.tenants.middleware.NexusTenantMiddleware',
+    'apps.tenants.middleware.TenantLimitMiddleware',
+    'apps.tenants.middleware.TenantSecurityHeadersMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -88,27 +93,12 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'nexus.urls'
-
-TEMPLATES = [{
-    'BACKEND': 'django.template.backends.django.DjangoTemplates',
-    'DIRS': [],
-    'APP_DIRS': True,
-    'OPTIONS': {
-        'context_processors': [
-            'django.template.context_processors.debug',
-            'django.template.context_processors.request',
-            'django.contrib.auth.context_processors.auth',
-            'django.contrib.messages.context_processors.messages',
-        ],
-    },
-}]
-
-WSGI_APPLICATION = 'nexus.wsgi.application'
-
+# ───────────────────────────────────────────
+# DATABASE (PostgreSQL with django-tenants)
+# ───────────────────────────────────────────
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
+        'ENGINE': 'django_tenants.postgresql_backend',
         'NAME': os.getenv('DB_NAME', 'nexus'),
         'USER': os.getenv('DB_USER', 'nexus'),
         'PASSWORD': os.getenv('DB_PASSWORD', 'nexus'),
@@ -117,11 +107,15 @@ DATABASES = {
     }
 }
 
+DATABASE_ROUTERS = (
+    'django_tenants.routers.TenantSyncRouter',
+)
+
+# ───────────────────────────────────────────
+# CACHING (Redis)
+# ───────────────────────────────────────────
 _redis_url_env = os.getenv('REDIS_URL')
 if _redis_url_env or not DEBUG:
-    # Production (or anyone who explicitly set REDIS_URL) uses a real shared
-    # cache, which matters for correct rate limiting and Celery across
-    # multiple worker processes.
     CACHES = {
         'default': {
             'BACKEND': 'django_redis.cache.RedisCache',
@@ -130,9 +124,16 @@ if _redis_url_env or not DEBUG:
         }
     }
 else:
-    # Local development without Docker/Redis running: fall back to an
-    # in-process cache so the API (and its rate limiting) still works.
     CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
+
+# ───────────────────────────────────────────
+# AUTHENTICATION
+# ───────────────────────────────────────────
+AUTH_USER_MODEL = 'tenants.TenantUser'
+AUTHENTICATION_BACKENDS = (
+    'django.contrib.auth.backends.ModelBackend',
+    'guardian.backends.ObjectPermissionBackend',
+)
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -141,19 +142,31 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
+ANONYMOUS_USER_ID = -1
+
+# ───────────────────────────────────────────
+# INTERNATIONALIZATION
+# ───────────────────────────────────────────
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
+# ───────────────────────────────────────────
+# STATIC & MEDIA FILES
+# ───────────────────────────────────────────
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# ───────────────────────────────────────────
+# REST FRAMEWORK
+# ───────────────────────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
@@ -177,11 +190,22 @@ REST_FRAMEWORK = {
         'anon': '30/minute',
         'user': '300/minute',
     },
+    'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
 }
 
-# CORS: wide open only in local development. In production, set
-# CORS_ALLOWED_ORIGINS to a comma-separated list of real frontend origins,
-# e.g. CORS_ALLOWED_ORIGINS=https://app.wassel.sa
+# ───────────────────────────────────────────
+# CORS
+# ───────────────────────────────────────────
+_allowed_hosts_env = os.getenv('ALLOWED_HOSTS', '')
+if _allowed_hosts_env:
+    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()]
+elif DEBUG:
+    ALLOWED_HOSTS = ['*']
+else:
+    raise RuntimeError(
+        'Refusing to start with DEBUG=False and no ALLOWED_HOSTS set.'
+    )
+
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
 else:
@@ -189,26 +213,20 @@ else:
     _cors_origins_env = os.getenv('CORS_ALLOWED_ORIGINS', '')
     CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_origins_env.split(',') if o.strip()]
 
-AUTH_USER_MODEL = 'core.User'
-
-ANONYMOUS_USER_ID = -1
-AUTHENTICATION_BACKENDS = (
-    'django.contrib.auth.backends.ModelBackend',
-    'guardian.backends.ObjectPermissionBackend',
-)
-
+# ───────────────────────────────────────────
+# CELERY
+# ───────────────────────────────────────────
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
-# Local dev without Docker/Redis running: execute tasks synchronously
-# in-process instead of trying (and failing) to reach a broker. Production
-# (or anyone who set REDIS_URL) always uses a real worker.
 CELERY_TASK_ALWAYS_EAGER = not _redis_url_env and DEBUG
 CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@nexus.local')
+# ───────────────────────────────────────────
+# EMAIL
+# ───────────────────────────────────────────
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@nexus-saas.com')
 if DEBUG and not os.getenv('EMAIL_HOST'):
-    # No real mail server configured for local dev: print emails to the
-    # console instead of trying (and failing) to connect to localhost:25.
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 else:
     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -218,78 +236,144 @@ else:
     EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
     EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
 
-# Database Routers for multi-tenancy and module separation
-DATABASE_ROUTERS = ['nexus.db_router.TenantRouter']
+# ───────────────────────────────────────────
+# STRIPE BILLING
+# ───────────────────────────────────────────
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
+STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY', '')
+STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
+STRIPE_WEBHOOK_URL = os.getenv('STRIPE_WEBHOOK_URL', '/api/billing/webhook/')
 
-# ============================================================================
-# PRODUCTION SETTINGS
-# ============================================================================
+# ───────────────────────────────────────────
+# SENTRY
+# ───────────────────────────────────────────
+SENTRY_DSN = os.environ.get('SENTRY_DSN')
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+    from sentry_sdk.integrations.celery import CeleryIntegration
+    from sentry_sdk.integrations.redis import RedisIntegration
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[
+            DjangoIntegration(),
+            CeleryIntegration(),
+            RedisIntegration(),
+        ],
+        traces_sample_rate=float(os.getenv('SENTRY_TRACES_SAMPLE_RATE', '0.1')),
+        profiles_sample_rate=float(os.getenv('SENTRY_PROFILES_SAMPLE_RATE', '0.1')),
+        environment=os.getenv('SENTRY_ENVIRONMENT', 'production'),
+        release=os.getenv('SENTRY_RELEASE', 'unknown'),
+        send_default_pii=False,
+    )
 
-# Security
-SECURE_SSL_REDIRECT = not DEBUG
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
-SECURE_BROWSER_XSS_FILTER = True
-SECURE_CONTENT_TYPE_NOSNIFF = True
-X_FRAME_OPTIONS = 'DENY'
+# ───────────────────────────────────────────
+# OPENTELEMETRY (Prometheus + Tempo)
+# ───────────────────────────────────────────
+OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv('OTEL_EXPORTER_OTLP_ENDPOINT', '')
+OTEL_SERVICE_NAME = os.getenv('OTEL_SERVICE_NAME', 'nexus-backend')
+OTEL_TRACES_SAMPLER = os.getenv('OTEL_TRACES_SAMPLER', 'parentbased_traceidratio')
+OTEL_TRACES_SAMPLER_ARG = os.getenv('OTEL_TRACES_SAMPLER_ARG', '0.1')
 
-# Static files (Whitenoise)
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+# ───────────────────────────────────────────
+# SECURITY HARDENING
+# ───────────────────────────────────────────
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
+    X_FRAME_OPTIONS = 'DENY'
+    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+    SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
 
-# Logging
+# ───────────────────────────────────────────
+# LOGGING (Structured for Loki)
+# ───────────────────────────────────────────
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
+        'json': {
+            '()': 'pythonjsonlogger.jsonlogger.JsonFormatter',
+            'format': '%(asctime)s %(levelname)s %(name)s %(message)s %(pathname)s %(lineno)d %(funcName)s',
+        },
         'verbose': {
             'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
             'style': '{',
         },
     },
     'handlers': {
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'json' if not DEBUG else 'verbose',
+        },
         'file': {
             'level': 'INFO',
             'class': 'logging.handlers.RotatingFileHandler',
             'filename': '/app/logs/nexus.log',
-            'maxBytes': 1024 * 1024 * 5,  # 5 MB
+            'maxBytes': 1024 * 1024 * 5,
             'backupCount': 5,
-            'formatter': 'verbose',
-        },
-        'console': {
-            'level': 'DEBUG',
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
+            'formatter': 'json',
         },
     },
     'root': {
-        'handlers': ['file', 'console'],
+        'handlers': ['console', 'file'],
         'level': 'INFO',
     },
     'loggers': {
         'django': {
-            'handlers': ['file', 'console'],
+            'handlers': ['console', 'file'],
             'level': 'INFO',
             'propagate': False,
         },
         'apps': {
-            'handlers': ['file', 'console'],
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django_tenants': {
+            'handlers': ['console', 'file'],
             'level': 'INFO',
             'propagate': False,
         },
     },
 }
 
-# Sentry (optional)
-SENTRY_DSN = os.environ.get('SENTRY_DSN')
-if SENTRY_DSN:
-    import sentry_sdk
-    from sentry_sdk.integrations.django import DjangoIntegration
-    from sentry_sdk.integrations.celery import CeleryIntegration
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        integrations=[DjangoIntegration(), CeleryIntegration()],
-        traces_sample_rate=0.1,
-        send_default_pii=True,
-    )
+# ───────────────────────────────────────────
+# PLUGIN SYSTEM
+# ───────────────────────────────────────────
+PLUGIN_DIRECTORY = BASE_DIR / 'plugins'
+PLUGIN_AUTO_DISCOVER = True
+PLUGIN_HOOK_REGISTRY = 'apps.plugins.models.HookRegistry'
+
+# ───────────────────────────────────────────
+# TENANT SETTINGS
+# ───────────────────────────────────────────
+SHOW_PUBLIC_IF_NO_TENANT_FOUND = True
+TENANT_NOT_FOUND_EXCEPTION_CLASS = 'django.http.Http404'
+
+# ───────────────────────────────────────────
+# ROOT URLCONF & WSGI
+# ───────────────────────────────────────────
+ROOT_URLCONF = 'nexus.urls'
+WSGI_APPLICATION = 'nexus.wsgi.application'
+
+TEMPLATES = [{
+    'BACKEND': 'django.template.backends.django.DjangoTemplates',
+    'DIRS': [],
+    'APP_DIRS': True,
+    'OPTIONS': {
+        'context_processors': [
+            'django.template.context_processors.debug',
+            'django.template.context_processors.request',
+            'django.contrib.auth.context_processors.auth',
+            'django.contrib.messages.context_processors.messages',
+        ],
+    },
+}]

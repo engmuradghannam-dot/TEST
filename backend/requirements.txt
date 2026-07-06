@@ -1,0 +1,54 @@
+# Django & Core
+django>=4.2,<5.0
+django-tenants>=3.6.0
+django-rest-framework>=0.1.0
+djangorestframework>=3.14.0
+django-cors-headers>=4.3.0
+django-filter>=23.5
+django-guardian>=2.4.0
+django-redis>=5.4.0
+django-celery-beat>=2.5.0
+
+# Database
+psycopg2-binary>=2.9.9
+
+# Caching & Messaging
+redis>=5.0.0
+celery>=5.3.0
+
+# Security
+pyjwt>=2.8.0
+cryptography>=41.0.0
+
+# Billing
+stripe>=7.0.0
+
+# Observability
+sentry-sdk>=1.39.0
+opentelemetry-api>=1.21.0
+opentelemetry-sdk>=1.21.0
+opentelemetry-instrumentation-django>=0.42b0
+opentelemetry-exporter-otlp>=1.21.0
+prometheus-client>=0.19.0
+
+# Logging
+python-json-logger>=2.0.7
+
+# Utilities
+python-dotenv>=1.0.0
+Pillow>=10.1.0
+requests>=2.31.0
+
+# WSGI/ASGI
+gunicorn>=21.2.0
+uvicorn>=0.24.0
+whitenoise>=6.6.0
+
+# Testing
+pytest>=7.4.0
+pytest-django>=4.7.0
+pytest-cov>=4.1.0
+factory-boy>=3.3.0
+
+# Development
+ipython>=8.18.0

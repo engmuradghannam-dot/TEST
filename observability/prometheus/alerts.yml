@@ -1,0 +1,118 @@
+groups:
+  - name: nexus-saas-alerts
+    rules:
+      # High Error Rate
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(django_http_responses_total{status=~"5.."}[5m]))
+            /
+            sum(rate(django_http_responses_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} for the last 5 minutes"
+
+      # High Latency
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(django_http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency detected"
+          description: "95th percentile latency is {{ $value }}s"
+
+      # Database Connection Pool Exhausted
+      - alert: DatabaseConnectionsHigh
+        expr: |
+          pg_stat_activity_count > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connections high"
+          description: "{{ $value }} active connections"
+
+      # Redis Memory High
+      - alert: RedisMemoryHigh
+        expr: |
+          redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory usage high"
+          description: "Redis memory usage is {{ $value | humanizePercentage }}"
+
+      # Pod Restart Rate
+      - alert: PodRestartRate
+        expr: |
+          rate(kube_pod_container_status_restarts_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod restarting frequently"
+          description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} is restarting"
+
+      # Disk Space Low
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk space low"
+          description: "Disk space is below 10% on {{ $labels.instance }}"
+
+      # CPU Usage High
+      - alert: CPUUsageHigh
+        expr: |
+          100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU usage high"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }}"
+
+      # Memory Usage High
+      - alert: MemoryUsageHigh
+        expr: |
+          (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memory usage high"
+          description: "Memory usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}"
+
+      # Tenant Suspended
+      - alert: TenantSuspended
+        expr: |
+          nexus_tenant_status{status="suspended"} > 0
+        for: 1m
+        labels:
+          severity: info
+        annotations:
+          summary: "Tenant suspended"
+          description: "Tenant {{ $labels.tenant }} has been suspended"
+
+      # Stripe Webhook Failures
+      - alert: StripeWebhookFailures
+        expr: |
+          rate(stripe_webhook_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Stripe webhook failures"
+          description: "Stripe webhook error rate is {{ $value }}"

@@ -1,0 +1,65 @@
+# Rate Limiting Configuration
+# Applied via Django middleware and Redis
+
+# Global rate limits
+limits:
+  # Authentication endpoints
+  auth:
+    login:
+      requests: 5
+      window: 60  # seconds
+      block_duration: 300  # 5 minutes
+    register:
+      requests: 3
+      window: 3600  # 1 hour
+      block_duration: 86400  # 24 hours
+    password_reset:
+      requests: 3
+      window: 3600
+      block_duration: 3600
+    mfa_verify:
+      requests: 5
+      window: 300
+      block_duration: 300
+
+  # API endpoints
+  api:
+    default:
+      requests: 100
+      window: 60
+      burst: 150
+    premium:
+      requests: 1000
+      window: 60
+      burst: 1500
+    enterprise:
+      requests: 10000
+      window: 60
+      burst: 15000
+
+  # Webhook endpoints
+  webhooks:
+    stripe:
+      requests: 100
+      window: 60
+    custom:
+      requests: 10
+      window: 60
+
+  # File upload
+  upload:
+    requests: 10
+    window: 60
+    max_size: 104857600  # 100MB
+
+# Redis configuration for rate limiting
+redis:
+  key_prefix: "rate_limit:"
+  ttl: 3600
+
+# Response headers
+headers:
+  limit: "X-RateLimit-Limit"
+  remaining: "X-RateLimit-Remaining"
+  reset: "X-RateLimit-Reset"
+  retry_after: "Retry-After"

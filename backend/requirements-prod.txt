@@ -1,0 +1,5 @@
+-r requirements.txt
+# Production-only dependencies
+sentry-sdk>=1.39.0
+opentelemetry-distro>=0.42b0
+opentelemetry-exporter-otlp>=1.21.0

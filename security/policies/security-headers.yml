@@ -1,0 +1,34 @@
+# Security Headers Configuration
+# Applied via Django middleware and Nginx
+
+# Content Security Policy
+csp_default = "default-src 'self'"
+csp_script = "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://cdn.jsdelivr.net"
+csp_style = "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com"
+csp_font = "font-src 'self' https://fonts.gstatic.com"
+csp_img = "img-src 'self' data: https: blob:"
+csp_connect = "connect-src 'self' https://api.stripe.com https://*.sentry.io https://*.grafana.net"
+csp_frame = "frame-src 'self' https://js.stripe.com https://hooks.stripe.com"
+csp_worker = "worker-src 'self' blob:"
+
+# Strict Transport Security
+hsts_max_age = 31536000
+hsts_include_subdomains = true
+hsts_preload = true
+
+# Frame Options
+x_frame_options = "DENY"
+
+# Content Type Options
+x_content_type_options = "nosniff"
+
+# Referrer Policy
+referrer_policy = "strict-origin-when-cross-origin"
+
+# Permissions Policy
+permissions_policy = "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), fullscreen=(self)"
+
+# Cross-Origin Policies
+cross_origin_embedder_policy = "require-corp"
+cross_origin_opener_policy = "same-origin"
+cross_origin_resource_policy = "same-origin"

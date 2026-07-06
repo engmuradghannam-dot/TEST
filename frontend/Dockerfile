@@ -1,25 +1,49 @@
-# Build stage
-FROM node:18-alpine AS builder
+# ───────────────────────────────────────────
+# Nexus SaaS Frontend - Multi-stage Build
+# ───────────────────────────────────────────
 
-WORKDIR /app
+# Stage 1: Build
+FROM node:20-alpine AS builder
 
-# Install dependencies
+WORKDIR /build
+
+# Install dependencies first (for caching)
 COPY package*.json ./
 RUN npm ci --only=production
 
-# Copy source
+# Copy source and build
 COPY . .
-
-# Build
 RUN npm run build
 
-# Production stage - just copy static files
-FROM alpine:latest AS production
+# Stage 2: Production (Nginx)
+FROM nginx:alpine AS production
 
-WORKDIR /app
+# Security: Create non-root user
+RUN addgroup -g 1001 -S nexus &&     adduser -S nexus -u 1001
 
-# Copy built files from builder
-COPY --from=builder /app/dist /app/dist
+# Install security headers module
+RUN apk add --no-cache curl
 
-# Copy to shared volume on start
-CMD ["sh", "-c", "cp -r /app/dist/* /var/www/static/"]
+# Copy built assets
+COPY --from=builder /build/dist /usr/share/nginx/html
+
+# Copy nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Security: Remove default server tokens
+RUN sed -i 's/server_tokens on/server_tokens off/' /etc/nginx/nginx.conf
+
+# Security: Set proper permissions
+RUN chown -R nexus:nexus /usr/share/nginx/html &&     chown -R nexus:nexus /var/cache/nginx &&     chown -R nexus:nexus /var/log/nginx &&     chown -R nexus:nexus /etc/nginx/conf.d
+
+# Security: Make required directories writable
+RUN touch /var/run/nginx.pid &&     chown -R nexus:nexus /var/run/nginx.pid
+
+USER nexus
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3     CMD curl -f http://localhost:80/ || exit 1
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

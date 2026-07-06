@@ -1,41 +1,49 @@
-FROM python:3.11-slim
+# ───────────────────────────────────────────
+# Nexus SaaS Backend - Multi-stage Build
+# ───────────────────────────────────────────
 
-# Security: Run as non-root user
-RUN groupadd -r nexus && useradd -r -g nexus nexus
+# Stage 1: Build dependencies
+FROM python:3.11-slim-bookworm AS builder
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    postgresql-client \
-    libpq-dev \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
 
-# Set work directory
-WORKDIR /app
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends     gcc     libpq-dev     python3-dev     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements-prod.txt ./
+RUN pip install --user --no-cache-dir -r requirements-prod.txt
 
-# Copy project
-COPY . .
+# Stage 2: Production image
+FROM python:3.11-slim-bookworm AS production
 
-# Collect static files
-RUN python manage.py collectstatic --noinput
+# Security: Create non-root user
+RUN groupadd -r nexus && useradd -r -g nexus nexus
 
-# Set permissions
-RUN chown -R nexus:nexus /app
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends     libpq5     curl     && rm -rf /var/lib/apt/lists/*     && apt-get clean
 
-# Switch to non-root user
+WORKDIR /app
+
+# Copy Python packages from builder
+COPY --from=builder /root/.local /home/nexus/.local
+ENV PATH=/home/nexus/.local/bin:$PATH
+
+# Copy application code
+COPY --chown=nexus:nexus . .
+
+# Security: Set proper permissions
+RUN chmod -R 755 /app &&     chmod -R 644 /app/**/*.py &&     chmod +x /app/entrypoint.sh
+
+# Security: Read-only root filesystem
+RUN mkdir -p /tmp /app/media /app/static &&     chown -R nexus:nexus /tmp /app/media /app/static
+
 USER nexus
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/api/v1/ || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3     CMD curl -f http://localhost:8000/health/ || exit 1
 
-# Expose port
 EXPOSE 8000
 
-# Default command (can be overridden in docker-compose)
-CMD ["gunicorn", "nexus.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--threads", "2"]
+ENTRYPOINT ["./entrypoint.sh"]
+CMD ["gunicorn", "nexus.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--access-logfile", "-", "--error-logfile", "-", "--capture-output", "--enable-stdio-inheritance"]
