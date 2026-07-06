@@ -377,3 +377,65 @@ TEMPLATES = [{
         ],
     },
 }]
+
+# ============================================================
+# CE-ERP OS Configuration
+# ============================================================
+
+# Redis Configuration
+REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+
+# Celery Configuration
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'Asia/Riyadh'
+CELERY_BEAT_SCHEDULE = {
+    'process-delayed-events': {
+        'task': 'apps.core.tasks.process_delayed_events',
+        'schedule': 60.0,  # Every minute
+    },
+    'check-overdue-tasks': {
+        'task': 'apps.core.tasks.check_overdue_tasks',
+        'schedule': 300.0,  # Every 5 minutes
+    },
+    'daily-maintenance': {
+        'task': 'apps.core.tasks.daily_maintenance',
+        'schedule': 86400.0,  # Every 24 hours
+    },
+    'collect-business-metrics': {
+        'task': 'apps.core.tasks.collect_business_metrics',
+        'schedule': 3600.0,  # Every hour
+    },
+    'analyze-system-performance': {
+        'task': 'apps.core.tasks.analyze_system_performance',
+        'schedule': 3600.0,  # Every hour
+    },
+}
+
+# OpenTelemetry
+OTEL_EXPORTER_OTLP_ENDPOINT = os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4317')
+OTEL_SERVICE_NAME = 'nexus-erp'
+OTEL_SERVICE_VERSION = '2.0.0'
+
+# AI Configuration
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY', '')
+
+# Vector Database
+VECTOR_DB_PATH = os.path.join(BASE_DIR, 'vector_db')
+
+# Plugin Configuration
+PLUGIN_SANDBOX_ENABLED = True
+PLUGIN_MAX_EXECUTION_TIME = 30  # seconds
+PLUGIN_MAX_MEMORY_MB = 128
+
+# Workflow Configuration
+WORKFLOW_MAX_RETRIES = 3
+WORKFLOW_RETRY_DELAY = 60  # seconds
+
+# State Machine
+STATE_MACHINE_AUDIT_ENABLED = True
