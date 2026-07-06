@@ -18,6 +18,9 @@ import LeaveRequests from './pages/LeaveRequests'
 import Payrolls from './pages/Payrolls'
 import Assets from './pages/Assets'
 import JournalEntries from './pages/JournalEntries'
+import StockReconciliation from './pages/StockReconciliation'
+import Budgets from './pages/Budgets'
+import WarehousesBranches from './pages/WarehousesBranches'
 
 function App() {
   return (
@@ -46,6 +49,9 @@ function App() {
         <Route path="payrolls" element={<Payrolls />} />
         <Route path="assets" element={<Assets />} />
         <Route path="accounts" element={<JournalEntries />} />
+        <Route path="stock-reconciliation" element={<StockReconciliation />} />
+        <Route path="budgets" element={<Budgets />} />
+        <Route path="warehouses" element={<WarehousesBranches />} />
         <Route path="*" element={<div className="p-10 text-center text-gray-500">الصفحة غير موجودة</div>} />
       </Route>
     </Routes>

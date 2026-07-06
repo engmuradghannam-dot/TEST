@@ -5,7 +5,7 @@ import {
   LayoutDashboard, ShoppingCart, Package, Users, Building2,
   Factory, Briefcase, BarChart3, Settings, Menu, X,
   Warehouse, Landmark, Contact, FolderKanban, Box, FileText,
-  UsersRound, CheckSquare, CalendarDays, Wallet, LogOut
+  UsersRound, CheckSquare, CalendarDays, Wallet, LogOut, ClipboardList, PiggyBank
 } from 'lucide-react'
 
 const menuItems = [
@@ -16,6 +16,8 @@ const menuItems = [
   { label: 'الموردين', icon: Warehouse, path: '/suppliers' },
   { label: 'العملاء', icon: Contact, path: '/customers' },
   { label: 'المخزون', icon: Package, path: '/items' },
+  { label: 'جرد المخزون', icon: ClipboardList, path: '/stock-reconciliation' },
+  { label: 'الفروع والمستودعات', icon: Warehouse, path: '/warehouses' },
   { label: 'أوامر الإنتاج', icon: Factory, path: '/work-orders' },
   { label: 'الموظفين', icon: Users, path: '/employees' },
   { label: 'الفرق', icon: UsersRound, path: '/teams' },
@@ -25,6 +27,7 @@ const menuItems = [
   { label: 'المشاريع', icon: FolderKanban, path: '/projects' },
   { label: 'الأصول', icon: Box, path: '/assets' },
   { label: 'الحسابات', icon: Landmark, path: '/accounts' },
+  { label: 'الميزانيات', icon: PiggyBank, path: '/budgets' },
   { label: 'التقارير', icon: BarChart3, path: '/reports' },
   { label: 'الإعدادات', icon: Settings, path: '/settings' },
 ]
