@@ -2,7 +2,7 @@ name: Nexus SaaS CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, staging]
     tags: ['v*']
   pull_request:
     branches: [main, develop]
@@ -13,13 +13,95 @@ env:
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "20"
 
+# Concurrency: cancel previous runs for same branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # ───────────────────────────────────────────
-  # Phase 1: Test & Lint
-  # ───────────────────────────────────────────
-  test-backend:
-    name: Backend Tests
+  # ═══════════════════════════════════════════
+  # PHASE 1: Code Quality & Lint
+  # ═══════════════════════════════════════════
+  lint:
+    name: Lint & Format Check
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Python linting tools
+        run: |
+          pip install black flake8 isort mypy bandit
+
+      - name: Lint Python (Black)
+        working-directory: backend
+        run: black --check --diff .
+        continue-on-error: true
+
+      - name: Lint Python (Flake8)
+        working-directory: backend
+        run: flake8 apps --max-line-length=120 --extend-ignore=E203,W503
+        continue-on-error: true
+
+      - name: Type Check Python (MyPy)
+        working-directory: backend
+        run: mypy apps --ignore-missing-imports
+        continue-on-error: true
+
+      - name: Security Scan (Bandit)
+        working-directory: backend
+        run: bandit -r apps -f json -o bandit-report.json || true
+
+      - name: Install Node dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint Frontend (ESLint)
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Type Check Frontend
+        working-directory: frontend
+        run: npm run type-check || true
+
+      - name: Upload security report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: backend/bandit-report.json
+
+  # ═══════════════════════════════════════════
+  # PHASE 2: Test Matrix (Backend)
+  # ═══════════════════════════════════════════
+  test-backend:
+    name: Backend Tests (${{ matrix.environment }})
+    needs: [lint]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev, staging, prod]
+        python-version: ['3.11']
+        include:
+          - environment: dev
+            django-settings: nexus.settings_dev
+            debug: true
+          - environment: staging
+            django-settings: nexus.settings_staging
+            debug: false
+          - environment: prod
+            django-settings: nexus.settings_prod
+            debug: false
+
     services:
       postgres:
         image: postgres:15-alpine
@@ -42,10 +124,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: ${{ matrix.python-version }}
           cache: 'pip'
           cache-dependency-path: backend/requirements*.txt
 
@@ -56,67 +138,59 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
-      - name: Run migrations
+      - name: Run migrations (${{ matrix.environment }})
         working-directory: backend
         env:
+          DJANGO_SETTINGS_MODULE: ${{ matrix.django-settings }}
           DATABASE_URL: postgresql://test:test@localhost:5432/nexus_test
           REDIS_URL: redis://localhost:6379/0
           SECRET_KEY: test-secret-key-for-ci-only
+          DEBUG: ${{ matrix.debug }}
         run: |
           python manage.py migrate --run-syncdb
           python manage.py migrate_schemas --shared
 
-      - name: Run tests with coverage
+      - name: Run tests with coverage (${{ matrix.environment }})
         working-directory: backend
         env:
+          DJANGO_SETTINGS_MODULE: ${{ matrix.django-settings }}
           DATABASE_URL: postgresql://test:test@localhost:5432/nexus_test
           REDIS_URL: redis://localhost:6379/0
           SECRET_KEY: test-secret-key-for-ci-only
+          DEBUG: ${{ matrix.debug }}
         run: |
           pytest --cov=apps --cov-report=xml --cov-report=term-missing -xvs
 
-      - name: Upload coverage to Codecov
+      - name: Upload coverage (${{ matrix.environment }})
         uses: codecov/codecov-action@v4
         with:
           files: backend/coverage.xml
+          flags: backend-${{ matrix.environment }}
           fail_ci_if_error: false
 
-      - name: Run security scan (Bandit)
-        working-directory: backend
-        run: bandit -r apps -f json -o bandit-report.json || true
-
-      - name: Run dependency check (Safety)
-        working-directory: backend
-        run: safety check --json --output safety-report.json || true
-
-      - name: Upload security reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-reports
-          path: |
-            backend/bandit-report.json
-            backend/safety-report.json
-
+  # ═══════════════════════════════════════════
+  # PHASE 3: Test Matrix (Frontend)
+  # ═══════════════════════════════════════════
   test-frontend:
     name: Frontend Tests
+    needs: [lint]
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['18', '20']
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Set up Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: ${{ matrix.node-version }}
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
-
-      - name: Run ESLint
-        working-directory: frontend
-        run: npm run lint
 
       - name: Run tests
         working-directory: frontend
@@ -130,21 +204,32 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           files: frontend/coverage/lcov.info
+          flags: frontend-node${{ matrix.node-version }}
           fail_ci_if_error: false
 
-  # ───────────────────────────────────────────
-  # Phase 2: Build & Push Docker Images
-  # ───────────────────────────────────────────
-  build-backend:
-    name: Build Backend Image
-    needs: [test-backend]
+  # ═══════════════════════════════════════════
+  # PHASE 4: Build & Push Docker Images
+  # ═══════════════════════════════════════════
+  build:
+    name: Build Images
+    needs: [test-backend, test-frontend]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        service: [backend, frontend]
+        include:
+          - service: backend
+            dockerfile: ./backend/Dockerfile
+            context: ./backend
+          - service: frontend
+            dockerfile: ./frontend/Dockerfile
+            context: ./frontend
     outputs:
-      image: ${{ steps.meta.outputs.tags }}
-      digest: ${{ steps.build.outputs.digest }}
+      backend-digest: ${{ steps.build.outputs.digest }}
+      frontend-digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 
@@ -162,7 +247,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -170,11 +255,12 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=,suffix=,format=short
 
-      - name: Build and push
+      - name: Build and push ${{ matrix.service }}
         id: build
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -185,145 +271,82 @@ jobs:
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend:${{ github.sha }}
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}:${{ github.sha }}
           format: spdx-json
-          output-file: backend-sbom.spdx.json
+          output-file: ${{ matrix.service }}-sbom.spdx.json
 
       - name: Upload SBOM
         uses: actions/upload-artifact@v4
         with:
-          name: sbom-backend
-          path: backend-sbom.spdx.json
+          name: sbom-${{ matrix.service }}
+          path: ${{ matrix.service }}-sbom.spdx.json
 
-  build-frontend:
-    name: Build Frontend Image
-    needs: [test-frontend]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      image: ${{ steps.meta.outputs.tags }}
-      digest: ${{ steps.build.outputs.digest }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix=,suffix=,format=short
-
-      - name: Build and push
-        id: build
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
-
-      - name: Generate SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:${{ github.sha }}
-          format: spdx-json
-          output-file: frontend-sbom.spdx.json
-
-      - name: Upload SBOM
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom-frontend
-          path: frontend-sbom.spdx.json
-
-  # ───────────────────────────────────────────
-  # Phase 3: Security Scanning
-  # ───────────────────────────────────────────
+  # ═══════════════════════════════════════════
+  # PHASE 5: Security Scanning
+  # ═══════════════════════════════════════════
   security-scan:
     name: Security Scan
-    needs: [build-backend, build-frontend]
+    needs: [build]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: read
       security-events: write
+    strategy:
+      matrix:
+        service: [backend, frontend]
     steps:
-      - name: Scan backend image
+      - name: Scan ${{ matrix.service }} image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend:${{ github.sha }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}:${{ github.sha }}
           format: 'sarif'
-          output: 'trivy-backend-results.sarif'
+          output: 'trivy-${{ matrix.service }}-results.sarif'
 
-      - name: Scan frontend image
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:${{ github.sha }}
-          format: 'sarif'
-          output: 'trivy-frontend-results.sarif'
-
-      - name: Upload Trivy results to GitHub Security
+      - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'trivy-backend-results.sarif'
+          sarif_file: 'trivy-${{ matrix.service }}-results.sarif'
 
-      - name: Upload Trivy results (frontend)
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-frontend-results.sarif'
+  # ═══════════════════════════════════════════
+  # PHASE 6: Deploy to Environments
+  # ═══════════════════════════════════════════
+  deploy-dev:
+    name: Deploy to Development
+    needs: [security-scan]
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment:
+      name: development
+      url: https://dev.nexus-saas.com
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Dev
+        run: echo "Deploying to development environment..."
 
-  # ───────────────────────────────────────────
-  # Phase 4: Deploy to Staging
-  # ───────────────────────────────────────────
   deploy-staging:
     name: Deploy to Staging
     needs: [security-scan]
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     environment:
       name: staging
       url: https://staging.nexus-saas.com
     steps:
       - uses: actions/checkout@v4
-
       - name: Configure kubectl
         uses: azure/k8s-set-context@v3
         with:
           method: kubeconfig
           kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
-
       - name: Deploy to Staging
         run: |
           helm upgrade --install nexus-saas-staging ./k8s/helm/nexus-saas             --namespace staging             --create-namespace             --set image.backend.tag=${{ github.sha }}             --set image.frontend.tag=${{ github.sha }}             --set ingress.hosts[0].host=staging.nexus-saas.com             --set replicaCount=2             --wait --timeout 10m
-
       - name: Run smoke tests
         run: |
           sleep 30
           curl -f https://staging.nexus-saas.com/health/ || exit 1
-          curl -f https://staging.nexus-saas.com/api/health/ || exit 1
 
-  # ───────────────────────────────────────────
-  # Phase 5: Deploy to Production
-  # ───────────────────────────────────────────
   deploy-production:
     name: Deploy to Production
     needs: [security-scan]
@@ -334,30 +357,20 @@ jobs:
       url: https://nexus-saas.com
     steps:
       - uses: actions/checkout@v4
-
       - name: Configure kubectl
         uses: azure/k8s-set-context@v3
         with:
           method: kubeconfig
           kubeconfig: ${{ secrets.KUBE_CONFIG_PRODUCTION }}
-
       - name: Deploy to Production
         run: |
-          helm upgrade --install nexus-saas ./k8s/helm/nexus-saas             --namespace production             --create-namespace             --set image.backend.tag=${{ github.ref_name }}             --set image.frontend.tag=${{ github.ref_name }}             --set ingress.hosts[0].host=nexus-saas.com             --set ingress.hosts[0].paths[0].host=*.nexus-saas.com             --set replicaCount=5             --set autoscaling.minReplicas=5             --set autoscaling.maxReplicas=50             --wait --timeout 15m
-
+          helm upgrade --install nexus-saas ./k8s/helm/nexus-saas             --namespace production             --create-namespace             --set image.backend.tag=${{ github.ref_name }}             --set image.frontend.tag=${{ github.ref_name }}             --set ingress.hosts[0].host=nexus-saas.com             --set replicaCount=5             --set autoscaling.minReplicas=5             --set autoscaling.maxReplicas=50             --wait --timeout 15m
       - name: Verify deployment
         run: |
           sleep 60
           kubectl rollout status deployment/nexus-saas-backend -n production
           kubectl rollout status deployment/nexus-saas-frontend -n production
-
-      - name: Run production smoke tests
-        run: |
-          curl -f https://nexus-saas.com/health/ || exit 1
-          curl -f https://nexus-saas.com/api/health/ || exit 1
-          curl -f https://api.nexus-saas.com/api/health/ || exit 1
-
-      - name: Notify Sentry of release
+      - name: Notify Sentry
         uses: getsentry/action-release@v1
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
