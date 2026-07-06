@@ -39,4 +39,5 @@ class WorkOrderSerializer(serializers.ModelSerializer):
         instance = super().update(instance, validated_data)
         if old_status != new_status and new_status == 'Completed':
             run_side_effect(instance.complete_production)
+            instance.refresh_from_db()
         return instance

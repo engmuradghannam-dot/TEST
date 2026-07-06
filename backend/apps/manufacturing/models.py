@@ -1,4 +1,6 @@
 from django.db import models, transaction
+from django.core.validators import MinValueValidator
+from decimal import Decimal
 from django.core.exceptions import ValidationError as DjangoValidationError
 from apps.core.models import Company, Warehouse, Branch
 from apps.inventory.models import Item, StockEntry
@@ -34,7 +36,7 @@ class BOM(models.Model):
 class BOMItem(models.Model):
     bom = models.ForeignKey(BOM, on_delete=models.CASCADE, related_name='items')
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
-    qty = models.DecimalField(max_digits=18, decimal_places=2)
+    qty = models.DecimalField(max_digits=18, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
     uom = models.CharField(max_length=50, default='Unit')
     rate = models.DecimalField(max_digits=18, decimal_places=2, default=0)
 

@@ -24,6 +24,7 @@ import WarehousesBranches from './pages/WarehousesBranches'
 import Projects from './pages/Projects'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
+import CRM from './pages/CRM'
 
 function App() {
   return (
@@ -58,6 +59,7 @@ function App() {
         <Route path="projects" element={<Projects />} />
         <Route path="reports" element={<Reports />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="crm" element={<CRM />} />
         <Route path="*" element={<div className="p-10 text-center text-gray-500">الصفحة غير موجودة</div>} />
       </Route>
     </Routes>

@@ -78,6 +78,7 @@ export const budgets = resource('budgets')
 
 export const workOrders = resource('work-orders')
 export const boms = resource('boms')
+export const bomItems = resource('bom-items')
 
 export const projects = resource('projects')
 export const tasks = resource('tasks')

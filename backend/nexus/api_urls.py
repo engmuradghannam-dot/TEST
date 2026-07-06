@@ -15,7 +15,7 @@ from apps.selling.views import (
     CustomerViewSet, SalesOrderViewSet, SalesOrderItemViewSet,
     SalesTaxChargeViewSet, SalesPaymentViewSet,
 )
-from apps.manufacturing.views import WorkOrderViewSet, BOMViewSet
+from apps.manufacturing.views import WorkOrderViewSet, BOMViewSet, BOMItemViewSet
 from apps.hr.views import (
     EmployeeViewSet, DepartmentViewSet, TeamViewSet,
     LeaveRequestViewSet, PayrollViewSet,
@@ -58,6 +58,7 @@ router.register(r'sales-tax-charges', SalesTaxChargeViewSet)
 router.register(r'sales-payments', SalesPaymentViewSet)
 router.register(r'work-orders', WorkOrderViewSet)
 router.register(r'boms', BOMViewSet)
+router.register(r'bom-items', BOMItemViewSet)
 router.register(r'employees', EmployeeViewSet)
 router.register(r'departments', DepartmentViewSet)
 router.register(r'teams', TeamViewSet)
