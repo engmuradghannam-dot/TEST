@@ -1,6 +1,8 @@
 import React from 'react'
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
+import ProtectedRoute from './components/ProtectedRoute'
+import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import PurchaseOrders from './pages/PurchaseOrders'
 import SalesOrders from './pages/SalesOrders'
@@ -9,11 +11,23 @@ import Companies from './pages/Companies'
 import Suppliers from './pages/Suppliers'
 import Customers from './pages/Customers'
 import WorkOrders from './pages/WorkOrders'
+import Teams from './pages/Teams'
+import Tasks from './pages/Tasks'
+import LeaveRequests from './pages/LeaveRequests'
+import Payrolls from './pages/Payrolls'
 
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<Layout />}>
+      <Route path="/login" element={<Login />} />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        }
+      >
         <Route index element={<Dashboard />} />
         <Route path="purchase-orders" element={<PurchaseOrders />} />
         <Route path="sales-orders" element={<SalesOrders />} />
@@ -22,7 +36,11 @@ function App() {
         <Route path="suppliers" element={<Suppliers />} />
         <Route path="customers" element={<Customers />} />
         <Route path="work-orders" element={<WorkOrders />} />
-        <Route path="*" element={<div className="p-10 text-center text-gray-500">Page not found</div>} />
+        <Route path="teams" element={<Teams />} />
+        <Route path="tasks" element={<Tasks />} />
+        <Route path="leave-requests" element={<LeaveRequests />} />
+        <Route path="payrolls" element={<Payrolls />} />
+        <Route path="*" element={<div className="p-10 text-center text-gray-500">الصفحة غير موجودة</div>} />
       </Route>
     </Routes>
   )

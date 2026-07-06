@@ -68,7 +68,10 @@ router.register(r'assets', AssetViewSet)
 router.register(r'asset-categories', AssetCategoryViewSet)
 router.register(r'workflows', WorkflowViewSet)
 
+from rest_framework.authtoken.views import obtain_auth_token
+
 urlpatterns = [
     path('', include(router.urls)),
     path('auth/', include('rest_framework.urls')),
+    path('auth-token/', obtain_auth_token, name='api_token_auth'),
 ]
