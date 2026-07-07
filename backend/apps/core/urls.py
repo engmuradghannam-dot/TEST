@@ -4,7 +4,7 @@ Nexus CE-ERP OS - API URLs
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-from apps.core.views import UIScreenViewSet
+from apps.core.views import CompanyViewSet, UIScreenViewSet
 from apps.core.api_views import (
     WorkflowDefinitionViewSet, ProcessInstanceViewSet, TaskInstanceViewSet,
     StateMachineViewSet, AIConversationViewSet, AIPromptTemplateViewSet,
@@ -13,6 +13,7 @@ from apps.core.api_views import (
 )
 
 router = DefaultRouter()
+router.register(r'companies', CompanyViewSet)
 
 # Workflow Engine
 router.register(r'workflows/definitions', WorkflowDefinitionViewSet, basename='workflow-definition')

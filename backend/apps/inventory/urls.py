@@ -5,9 +5,9 @@ from apps.inventory.views import ItemViewSet, ItemGroupViewSet, StockEntryViewSe
 router = DefaultRouter()
 router.register(r'items', ItemViewSet)
 router.register(r'item-groups', ItemGroupViewSet)
-router.register(r'stock-entrys', StockEntryViewSet)
+router.register(r'stock-entries', StockEntryViewSet)
 router.register(r'item-serial-numbers', ItemSerialNumberViewSet)
-router.register(r'item-batchs', ItemBatchViewSet)
+router.register(r'item-batches', ItemBatchViewSet)
 router.register(r'stock-reconciliations', StockReconciliationViewSet)
 router.register(r'stock-reconciliation-items', StockReconciliationItemViewSet)
 

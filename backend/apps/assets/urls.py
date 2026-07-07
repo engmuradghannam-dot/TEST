@@ -4,6 +4,6 @@ from apps.assets.views import AssetViewSet, AssetCategoryViewSet
 
 router = DefaultRouter()
 router.register(r'assets', AssetViewSet)
-router.register(r'asset-categorys', AssetCategoryViewSet)
+router.register(r'asset-categories', AssetCategoryViewSet)
 
 urlpatterns = router.urls

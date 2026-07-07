@@ -9,24 +9,75 @@ Each returns a plain dict ready for JSON, PDF, or Excel rendering.
 """
 from decimal import Decimal
 
-from django.db.models import Sum, Q
+from decimal import Decimal
+from django.db.models import Sum, Q, Count
+from apps.accounts.models import JournalEntry
+import django.db.models as models
 
 from apps.accounts.models import Account, JournalEntryLine
 
 
 def _line_sums(company, date_from=None, date_to=None):
-    """Aggregate posted debits/credits per account from JE lines."""
+    """Aggregate posted debits/credits per account.
+    Handles both multi-line entries (JournalEntryLine) and two-account shortcut
+    entries (JournalEntry.debit_account / credit_account / amount)."""
+    from django.db.models import Count
+
+    # -- multi-line entries --
     q = Q(journal_entry__company=company, journal_entry__status='Submitted')
     if date_from:
         q &= Q(journal_entry__posting_date__gte=date_from)
     if date_to:
         q &= Q(journal_entry__posting_date__lte=date_to)
-    rows = (JournalEntryLine.objects.filter(q)
-            .values('account_id', 'account__account_number', 'account__account_name',
-                    'account__account_type')
-            .annotate(debit=Sum('debit'), credit=Sum('credit'))
-            .order_by('account__account_number'))
-    return list(rows)
+    line_rows = list(JournalEntryLine.objects.filter(q)
+        .values('account_id', 'account__account_number', 'account__account_name',
+                'account__account_type')
+        .annotate(debit=Sum('debit'), credit=Sum('credit')))
+
+    # -- shortcut entries (no lines) --
+    from apps.accounts.models import JournalEntry as JE
+    qb = Q(company=company, status='Submitted',
+           debit_account__isnull=False, credit_account__isnull=False)
+    if date_from:
+        qb &= Q(posting_date__gte=date_from)
+    if date_to:
+        qb &= Q(posting_date__lte=date_to)
+    shortcut_jes = JE.objects.filter(qb).annotate(lc=Count('lines')).filter(lc=0)
+
+    extra = {}
+    for je in shortcut_jes:
+        for is_debit, acc in [(True, je.debit_account), (False, je.credit_account)]:
+            if acc is None:
+                continue
+            key = acc.pk
+            extra.setdefault(key, {
+                'account_id': key,
+                'account__account_number': acc.account_number,
+                'account__account_name': acc.account_name,
+                'account__account_type': acc.account_type,
+                'debit': Decimal('0'), 'credit': Decimal('0'),
+            })
+            if is_debit:
+                extra[key]['debit'] += Decimal(str(je.amount or 0))
+            else:
+                extra[key]['credit'] += Decimal(str(je.amount or 0))
+
+    # merge
+    merged = {r['account_id']: {
+        'account_id': r['account_id'],
+        'account__account_number': r['account__account_number'],
+        'account__account_name': r['account__account_name'],
+        'account__account_type': r['account__account_type'],
+        'debit': r['debit'] or Decimal('0'),
+        'credit': r['credit'] or Decimal('0'),
+    } for r in line_rows}
+    for k, v in extra.items():
+        if k in merged:
+            merged[k]['debit'] += v['debit']
+            merged[k]['credit'] += v['credit']
+        else:
+            merged[k] = v
+    return sorted(merged.values(), key=lambda x: x['account__account_number'] or '')
 
 
 def trial_balance(company, as_of=None) -> dict:

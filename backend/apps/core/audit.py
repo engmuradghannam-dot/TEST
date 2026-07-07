@@ -29,7 +29,7 @@ class AuditLogEntry(models.Model):
     ]
 
     # WHO
-    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_entries')
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_log_entries')
     user_email = models.EmailField(blank=True, help_text='Cached email in case user is deleted')
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(blank=True)

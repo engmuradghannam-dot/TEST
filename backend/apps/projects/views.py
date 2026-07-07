@@ -112,7 +112,8 @@ class TaskViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
             return qs
         employee = getattr(user, 'employee_profile', None)
         if not employee:
-            return qs.none()
+            # No employee profile yet (e.g. admin/API user) -> full company scope
+            return qs
         return qs.filter(
             Q(assigned_to=employee) | Q(team__members=employee)
         ).distinct()

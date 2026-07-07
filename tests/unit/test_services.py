@@ -29,6 +29,7 @@ class MockRepository(BaseRepository):
         return self.data.pop(id, None) is not None
 
 
+@pytest.mark.django_db
 class TestBaseService:
     def test_create(self):
         repo = MockRepository()

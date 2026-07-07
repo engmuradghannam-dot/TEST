@@ -4,7 +4,7 @@ from apps.accounts.views import AccountViewSet, JournalEntryViewSet, CostCenterV
 
 router = DefaultRouter()
 router.register(r'accounts', AccountViewSet)
-router.register(r'journal-entrys', JournalEntryViewSet)
+router.register(r'journal-entries', JournalEntryViewSet)
 router.register(r'cost-centers', CostCenterViewSet)
 router.register(r'budgets', BudgetViewSet)
 

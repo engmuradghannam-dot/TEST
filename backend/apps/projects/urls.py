@@ -7,10 +7,10 @@ router.register(r'projects', ProjectViewSet)
 router.register(r'tasks', TaskViewSet)
 router.register(r'milestones', MilestoneViewSet)
 router.register(r'stakeholders', StakeholderViewSet)
-router.register(r'risk-registers', RiskRegisterViewSet)
-router.register(r'issue-logs', IssueLogViewSet)
+router.register(r'risks', RiskRegisterViewSet)
+router.register(r'issues', IssueLogViewSet)
 router.register(r'change-requests', ChangeRequestViewSet)
-router.register(r'time-entrys', TimeEntryViewSet)
+router.register(r'time-entries', TimeEntryViewSet)
 router.register(r'task-comments', TaskCommentViewSet)
 
 urlpatterns = router.urls

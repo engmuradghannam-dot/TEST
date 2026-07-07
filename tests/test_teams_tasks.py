@@ -13,7 +13,7 @@ class TestTeamTaskVisibility:
         other_task = Task.objects.create(project=project, subject='Only Omar', assigned_to=employee2)
 
         api_client.force_authenticate(user=company_user)
-        resp = api_client.get('/api/v1/tasks/')
+        resp = api_client.get('/api/v1/projects/tasks/')
         assert resp.status_code == 200
         subjects = {t['subject'] for t in resp.data['results']}
 
@@ -26,6 +26,6 @@ class TestTeamTaskVisibility:
         Task.objects.create(project=project, subject='Task A', assigned_to=employee)
         Task.objects.create(project=project, subject='Task B', assigned_to=employee2)
 
-        resp = authenticated_client.get('/api/v1/tasks/')
+        resp = authenticated_client.get('/api/v1/projects/tasks/')
         assert resp.status_code == 200
         assert len(resp.data['results']) == 2
