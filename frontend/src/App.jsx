@@ -16,6 +16,7 @@ import AICommandCenter from './pages/AICommandCenter';
 import GanttChart from './pages/GanttChart';
 import KanbanBoard from './pages/KanbanBoard';
 import Onboarding from './pages/Onboarding';
+import ErrorBoundary from './components/ErrorBoundary';
 import ScreenBuilder from './pages/ScreenBuilder';
 import JournalEntries from './pages/JournalEntries';
 import Budgets from './pages/Budgets';
@@ -288,6 +289,7 @@ export default function App() {
 
           {/* Main Content */}
           <main className="flex-1 overflow-y-auto">
+            <ErrorBoundary>
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/finance/reports" element={<FinancialReports />} />
@@ -326,6 +328,7 @@ export default function App() {
               <Route path="/compliance" element={<ComplianceDashboard />} />
               <Route path="/kpi" element={<KPIDashboard />} />
             </Routes>
+            </ErrorBoundary>
           </main>
         </div>
       </div>

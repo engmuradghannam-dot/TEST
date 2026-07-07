@@ -102,6 +102,8 @@ MIDDLEWARE = [
     'nexus.middleware.APIAuthMiddleware',
     'apps.core.security.zero_trust.ZeroTrustMiddleware',
     'nexus.middleware.ValidationMiddleware',
+    'nexus.middleware.RateLimitHeaderMiddleware',
+    'nexus.middleware.SecurityHeadersMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]

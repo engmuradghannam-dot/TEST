@@ -48,20 +48,22 @@ jobs:
 
       - name: Run migrations
         env:
+          DJANGO_SETTINGS_MODULE: nexus.settings_test
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/nexus_test
           SECRET_KEY: test-secret-key
         run: |
           cd backend
-          python manage.py migrate
+          python manage.py migrate --no-input
 
       - name: Run tests with coverage
         env:
+          DJANGO_SETTINGS_MODULE: nexus.settings_test
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/nexus_test
           SECRET_KEY: test-secret-key
           CELERY_BROKER_URL: redis://localhost:6379/0
         run: |
           cd backend
-          pytest --cov=. --cov-report=xml --cov-report=term
+          pytest tests/ tests/integration/ tests/e2e/ --cov=apps --cov-report=xml --cov-report=term
 
       - name: Upload coverage
         uses: codecov/codecov-action@v3

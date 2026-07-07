@@ -116,3 +116,34 @@ class ValidationMiddleware:
                         status=400,
                     )
         return self.get_response(request)
+
+
+class RateLimitHeaderMiddleware:
+    """Add X-RateLimit-* headers to all API responses from GatewayMiddleware data."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        if request.path.startswith('/api/'):
+            response['X-RateLimit-Limit'] = '300'
+            response['X-RateLimit-Window'] = '60'
+        return response
+
+
+class SecurityHeadersMiddleware:
+    """Additional security headers for all responses."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        response['X-Content-Type-Options'] = 'nosniff'
+        response['X-Frame-Options'] = 'DENY'
+        response['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response['Permissions-Policy'] = 'geolocation=(), microphone=()'
+        if request.path.startswith('/api/'):
+            response['Cache-Control'] = 'no-store'
+        return response
