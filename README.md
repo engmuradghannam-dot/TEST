@@ -1,6 +1,6 @@
 # Nexus — Cognitive ERP Platform
 
-[![Tests](https://img.shields.io/badge/tests-118%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-145%20passing-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.12-blue)]()
 [![Django](https://img.shields.io/badge/django-4.2-green)]()
 [![React](https://img.shields.io/badge/react-18-blue)]()
@@ -79,6 +79,16 @@ The first Arabic-first, AI-native, multi-tenant SaaS ERP — built for the Gulf 
 - Per-tenant rate limiting in the API Gateway
 
 ---
+
+## Quick Start with Demo Data
+
+```bash
+# After backend setup, seed realistic Gulf demo data:
+python manage.py seed_demo
+
+# Login with: admin@nexusdemo.com / Demo@1234!
+# Includes: customers, suppliers, items, projects, KPIs, journal entries
+```
 
 ## Getting Started
 

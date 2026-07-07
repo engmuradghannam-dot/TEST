@@ -200,3 +200,49 @@ def handle_compliance_failed(event_data):
     company_id = event_data.get('company_id')
     logger.warning(f"Compliance check failed: {control_id} for company {company_id}")
     return {'alert_sent': True}
+
+
+def fire_webhooks(event_type: str, payload: dict, company_id=None):
+    """Dispatch outbound webhooks for the given event type.
+    Called from event_bus handlers — non-blocking via Celery."""
+    try:
+        from celery import shared_task
+        dispatch_webhook.delay(event_type, payload, company_id)
+    except Exception:
+        pass
+
+
+def dispatch_webhook(event_type: str, payload: dict, company_id=None):
+    """Sync dispatch — called by Celery task."""
+    import hmac
+    import hashlib
+    import json
+    import requests
+    from .models import WebhookEndpoint, WebhookDelivery
+    from django.utils import timezone
+
+    endpoints = WebhookEndpoint.objects.filter(is_active=True)
+    if company_id:
+        endpoints = endpoints.filter(company_id=company_id) | endpoints.filter(company__isnull=True)
+
+    body = json.dumps({'event': event_type, 'payload': payload,
+                       'timestamp': timezone.now().isoformat()}, default=str)
+    for ep in endpoints:
+        if event_type not in (ep.events or []) and '*' not in (ep.events or []):
+            continue
+        headers = {'Content-Type': 'application/json', 'X-Event-Type': event_type}
+        if ep.secret:
+            sig = hmac.new(ep.secret.encode(), body.encode(), hashlib.sha256).hexdigest()
+            headers['X-Nexus-Signature'] = f'sha256={sig}'
+        delivery = WebhookDelivery.objects.create(
+            endpoint=ep, event_type=event_type, payload=payload)
+        try:
+            resp = requests.post(ep.url, data=body, headers=headers, timeout=10)
+            delivery.response_status = resp.status_code
+            delivery.response_body = resp.text[:500]
+            delivery.status = 'success' if resp.ok else 'failed'
+        except requests.RequestException as exc:
+            delivery.response_body = str(exc)
+            delivery.status = 'failed'
+        delivery.delivered_at = timezone.now()
+        delivery.save(update_fields=['response_status','response_body','status','delivered_at'])

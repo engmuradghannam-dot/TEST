@@ -376,3 +376,57 @@ def daily_maintenance():
 
     logger.info(f"Daily maintenance completed: {results}")
     return results
+
+
+# ── Email Notification Tasks ──────────────────────────────────────────────────
+@app.task(bind=True, max_retries=3)
+def send_notification_email(self, to_email: str, subject: str, body: str):
+    """Generic notification email with retry."""
+    try:
+        from django.core.mail import send_mail
+        from django.conf import settings
+        send_mail(
+            subject=subject, message=body,
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@nexus.erp'),
+            recipient_list=[to_email], fail_silently=False)
+    except Exception as exc:
+        raise self.retry(exc=exc, countdown=60 * (self.request.retries + 1))
+
+
+@app.task
+def send_po_approval_notification(po_id: int):
+    """Notify approver when PO is submitted."""
+    try:
+        from apps.buying.models import PurchaseOrder
+        po = PurchaseOrder.objects.select_related('company', 'supplier').get(pk=po_id)
+        from apps.core.models import User
+        approvers = User.objects.filter(company=po.company, is_staff=True).exclude(email='')
+        for approver in approvers[:3]:
+            send_notification_email.delay(
+                approver.email,
+                f'PO Approval Required: {po.po_number}',
+                f'Purchase Order {po.po_number} from {po.supplier.name} '
+                f'(SAR {po.grand_total:,.2f}) requires your approval.\n\n'
+                f'Login to Nexus to review and approve.')
+    except Exception:
+        pass
+
+
+@app.task
+def notify_low_stock(item_id: int, current_qty: float, reorder_level: float):
+    """Notify warehouse managers of low stock."""
+    try:
+        from apps.inventory.models import Item
+        item = Item.objects.select_related('company').get(pk=item_id)
+        from apps.core.models import User
+        managers = User.objects.filter(company=item.company, is_staff=True).exclude(email='')
+        for m in managers[:3]:
+            send_notification_email.delay(
+                m.email,
+                f'Low Stock Alert: {item.item_name}',
+                f'Item {item.item_code} - {item.item_name} is running low.\n'
+                f'Current quantity: {current_qty}\n'
+                f'Reorder level: {reorder_level}\n\n'
+                f'Please create a purchase order.')
+    except Exception:
+        pass

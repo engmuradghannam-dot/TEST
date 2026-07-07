@@ -9,6 +9,7 @@ router.register(r'cost-centers', CostCenterViewSet)
 router.register(r'budgets', BudgetViewSet)
 
 from django.urls import path
+from apps.accounts.password_reset import (RequestPasswordResetView, ConfirmPasswordResetView)
 from apps.accounts.report_views import (
     TrialBalanceView, IncomeStatementView, BalanceSheetView, FinancialKPIsView,
 )
@@ -18,4 +19,6 @@ urlpatterns = router.urls + [
     path('reports/income-statement/', IncomeStatementView.as_view()),
     path('reports/balance-sheet/', BalanceSheetView.as_view()),
     path('reports/kpis/', FinancialKPIsView.as_view()),
+    path('password/reset/', RequestPasswordResetView.as_view()),
+    path('password/confirm/', ConfirmPasswordResetView.as_view()),
 ]

@@ -129,3 +129,72 @@ export const fetchAssets = assets.list
 export const fetchLeads = leads.list
 
 export default api
+
+// ── KPI & Analytics ───────────────────────────────────────────────────────
+export const kpiDefinitions    = resource('kpi/definitions')
+export const companyKpis       = resource('kpi/company-kpis')
+export const kpiHistory        = resource('kpi/history')
+export const dashboardWidgets  = resource('kpi/dashboard-widgets')
+
+// ── Market & Localization ─────────────────────────────────────────────────
+export const countryLocalizations = resource('market/localizations')
+export const certifications    = resource('market/certifications')
+export const partners          = resource('market/partners')
+export const marketplaceApps   = resource('market/apps')
+
+// ── Industries ────────────────────────────────────────────────────────────
+export const industryCatalog   = resource('industries/industry-catalogs')
+export const industryControls  = resource('industries/industry-controls')
+export const aiAgentRegistry   = resource('industries/ai-agent-registrys')
+
+// ── Events ────────────────────────────────────────────────────────────────
+export const eventStore        = resource('events/event-stores')
+export const eventHandlers     = resource('events/event-handlers')
+
+// ── IAM & Security ────────────────────────────────────────────────────────
+export const identityProviders  = resource('iam/providers')
+export const privilegedSessions = resource('iam/privileged-sessions')
+export const roleMiningJobs     = resource('iam/role-mining-jobs')
+export const securityEvents     = resource('iam/security-events')
+
+// ── Compliance ────────────────────────────────────────────────────────────
+export const complianceFrameworks = resource('compliance/frameworks')
+export const complianceAssessments = resource('compliance/assessments')
+
+// ── Manufacturing ─────────────────────────────────────────────────────────
+// DEDUP: export const bomItems          = resource('manufacturing/bom-items')
+
+// ── Reports ───────────────────────────────────────────────────────────────
+export const reports = {
+  trialBalance:     (params) => api.get('/accounts/reports/trial-balance/', { params }).then(r => r.data),
+  incomeStatement:  (params) => api.get('/accounts/reports/income-statement/', { params }).then(r => r.data),
+  balanceSheet:     (params) => api.get('/accounts/reports/balance-sheet/', { params }).then(r => r.data),
+  kpis:             ()       => api.get('/accounts/reports/kpis/').then(r => r.data),
+}
+
+// ── AI & NLP ──────────────────────────────────────────────────────────────
+export const nlErp = {
+  query:    (text)      => api.post('/ai/nl/', { text }).then(r => r.data),
+  forecast: ()          => api.get('/ai/forecast/sales/').then(r => r.data),
+  health:   ()          => api.get('/ai/core/health/').then(r => r.data),
+}
+
+// ── Onboarding & ZATCA ────────────────────────────────────────────────────
+export const onboarding = {
+  register: (data)      => api.post('/tenants/onboarding/register/', data).then(r => r.data),
+  setup:    (options)   => api.post('/tenants/onboarding/setup/', { options }).then(r => r.data),
+  importCsv:(entity, csv) => api.post('/tenants/onboarding/import-data/', { entity, csv }).then(r => r.data),
+  status:   ()          => api.get('/tenants/onboarding/status/').then(r => r.data),
+  zatca:    (data)      => api.post('/tenants/onboarding/zatca/', data).then(r => r.data),
+}
+
+// ── Health ────────────────────────────────────────────────────────────────
+export const system = {
+  health: () => api.get('/core/health/').then(r => r.data),
+  ready:  () => api.get('/core/ready/').then(r => r.data),
+}
+// ── Password Reset ────────────────────────────────────────────────────────
+export const passwordReset = {
+  request: (email)              => api.post('/accounts/password/reset/', { email }).then(r => r.data),
+  confirm: (token, new_password) => api.post('/accounts/password/confirm/', { token, new_password }).then(r => r.data),
+}
