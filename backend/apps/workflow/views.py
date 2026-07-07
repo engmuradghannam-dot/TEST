@@ -54,3 +54,15 @@ class ApprovalRecordViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
         record.comments = request.data.get('comments', '')
         record.save()
         return Response(ApprovalRecordSerializer(record).data)
+
+
+class WorkflowStateViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = WorkflowState.objects.all()
+    serializer_class = WorkflowStateSerializer
+    company_field = 'workflow__company'
+
+
+class WorkflowTransitionViewSet(CompanyScopedMixin, viewsets.ModelViewSet):
+    queryset = WorkflowTransition.objects.all()
+    serializer_class = WorkflowTransitionSerializer
+    company_field = 'workflow__company'

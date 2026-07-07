@@ -23,7 +23,14 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Subscription.objects.filter(tenant=self.request.tenant)
+        tenant = getattr(self.request, "tenant", None)
+        if tenant:
+            return Subscription.objects.filter(tenant=tenant)
+        user = self.request.user
+        company = getattr(user, "company", None)
+        if company:
+            return Subscription.objects.filter(tenant__name=company.name)
+        return Subscription.objects.none()
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
