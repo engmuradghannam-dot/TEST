@@ -1,18 +1,11 @@
-from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import (
-    IndustryCatalogViewSet, IndustryControlViewSet,
-    AIAgentRegistryViewSet, CompanyIndustryProfileViewSet,
-    ControlExecutionLogViewSet
-)
+from .views import IndustryCatalogViewSet, IndustryControlViewSet, AIAgentRegistryViewSet, CompanyIndustryProfileViewSet, ControlExecutionLogViewSet
 
 router = DefaultRouter()
-router.register(r'catalog', IndustryCatalogViewSet, basename='industry-catalog')
-router.register(r'controls', IndustryControlViewSet, basename='industry-control')
-router.register(r'ai-agents', AIAgentRegistryViewSet, basename='ai-agent')
-router.register(r'company-profiles', CompanyIndustryProfileViewSet, basename='company-industry-profile')
-router.register(r'execution-logs', ControlExecutionLogViewSet, basename='control-execution-log')
+router.register(r'industry-catalogs', IndustryCatalogViewSet)
+router.register(r'industry-controls', IndustryControlViewSet)
+router.register(r'a-i-agent-registrys', AIAgentRegistryViewSet)
+router.register(r'company-industry-profiles', CompanyIndustryProfileViewSet)
+router.register(r'control-execution-logs', ControlExecutionLogViewSet)
 
-urlpatterns = [
-    path('', include(router.urls)),
-]
+urlpatterns = router.urls

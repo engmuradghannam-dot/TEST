@@ -4,7 +4,7 @@ from apps.manufacturing.views import WorkOrderViewSet, BOMViewSet, BOMItemViewSe
 
 router = DefaultRouter()
 router.register(r'work-orders', WorkOrderViewSet)
-router.register(r'b-o-ms', BOMViewSet)
-router.register(r'b-o-m-items', BOMItemViewSet)
+router.register(r'boms', BOMViewSet)
+router.register(r'bom-items', BOMItemViewSet)
 
 urlpatterns = router.urls

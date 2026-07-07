@@ -37,6 +37,10 @@ MODULE_ROUTES = [
     ("projects/", "apps.projects.urls"),
     ("assets/", "apps.assets.urls"),
     ("workflow/", "apps.workflow.urls"),
+    ("kpi/", "apps.kpi.urls"),
+    ("industries/", "apps.industries.urls"),
+    ("market/", "apps.market.urls"),
+    ("events/", "apps.events.urls"),
     ("iam/", "apps.iam.urls"),
     ("ai/", "apps.iam.ai_urls"),
 ]

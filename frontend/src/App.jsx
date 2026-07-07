@@ -13,6 +13,8 @@ import PluginMarketplace from './pages/PluginMarketplace';
 import SelfImprovementDashboard from './pages/SelfImprovementDashboard';
 import FinancialReports from './pages/FinancialReports';
 import AICommandCenter from './pages/AICommandCenter';
+import GanttChart from './pages/GanttChart';
+import KanbanBoard from './pages/KanbanBoard';
 import Onboarding from './pages/Onboarding';
 import ScreenBuilder from './pages/ScreenBuilder';
 import JournalEntries from './pages/JournalEntries';
@@ -290,6 +292,8 @@ export default function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/finance/reports" element={<FinancialReports />} />
               <Route path="/ai-command" element={<AICommandCenter />} />
+              <Route path="/projects/:id/gantt" element={<GanttChart />} />
+              <Route path="/projects/:id/kanban" element={<KanbanBoard />} />
               <Route path="/onboarding" element={<Onboarding />} />
               <Route path="/finance/journal-entries" element={<JournalEntries />} />
               <Route path="/finance/budgets" element={<Budgets />} />

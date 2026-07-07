@@ -4,6 +4,6 @@ from apps.crm.views import LeadViewSet, OpportunityViewSet
 
 router = DefaultRouter()
 router.register(r'leads', LeadViewSet)
-router.register(r'opportunitys', OpportunityViewSet)
+router.register(r'opportunities', OpportunityViewSet)
 
 urlpatterns = router.urls

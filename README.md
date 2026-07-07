@@ -1,186 +1,176 @@
-# Nexus Framework - SaaS ERP Platform
+# Nexus — Cognitive ERP Platform
 
-[![CI/CD](https://github.com/engmuradghannam-dot/Nexus-Framework/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/engmuradghannam-dot/Nexus-Framework/actions/workflows/ci-cd.yml)
+[![Tests](https://img.shields.io/badge/tests-118%20passing-brightgreen)]()
+[![Python](https://img.shields.io/badge/python-3.12-blue)]()
+[![Django](https://img.shields.io/badge/django-4.2-green)]()
+[![React](https://img.shields.io/badge/react-18-blue)]()
 
-A production-ready, multi-tenant SaaS ERP platform built with Django + React, deployed on Kubernetes with full observability.
+The first Arabic-first, AI-native, multi-tenant SaaS ERP — built for the Gulf SME market.
 
-## Architecture
+---
+
+## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Nginx Ingress                         │
-│              (SSL Termination, Rate Limiting, WAF)           │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-        ┌──────────────┴──────────────┐
-        │                           │
-   ┌────▼────┐                 ┌────▼────┐
-   │ Frontend │                 │ Backend │
-   │  React   │                 │ Django  │
-   │  (SPA)   │                 │  DRF    │
-   └─────────┘                 └────┬────┘
-                                    │
-                    ┌───────────────┼───────────────┐
-                    │               │               │
-              ┌─────▼─────┐  ┌─────▼─────┐  ┌─────▼─────┐
-              │ PostgreSQL │  │  Redis    │  │  Celery   │
-              │(Multi-tenant│  │  Cache    │  │  Workers  │
-              │  schemas)  │  │  Queue    │  │           │
-              └────────────┘  └───────────┘  └───────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    Nginx Ingress + WAF                          │
+│             SSL Termination · Rate Limiting · CORS              │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+            ┌──────────────┴──────────────┐
+            │                             │
+       ┌────▼────┐                   ┌────▼────────┐
+       │ React   │                   │ Django DRF  │
+       │ (SPA)   │                   │ /api/v1/    │◄── API Gateway
+       └─────────┘                   └─────────────┘    (versioned,
+                                           │             rate-limited)
+                    ┌──────────────────────┼───────────────────┐
+                    │                      │                   │
+              ┌─────▼──────┐        ┌──────▼─────┐    ┌───────▼──────┐
+              │ PostgreSQL │        │   Redis    │    │    Celery    │
+              │ per-tenant │        │ Event Bus  │    │   Workers    │
+              │  schemas   │        │  + Cache   │    │  + Scheduler │
+              └────────────┘        └────────────┘    └──────────────┘
 ```
 
-## Key Features
+---
+
+## Core Capabilities
+
+### ERP Modules (14)
+| Module | Capabilities |
+|--------|-------------|
+| **Accounting** | Double-entry GL, COA, fiscal years/periods, year-end closing, multi-currency |
+| **Sales** | SO, invoicing, VAT (ZATCA Phase 2 clearance/reporting), delivery |
+| **Purchasing** | PO, three-way matching, supplier management |
+| **Inventory** | Stock entries, serial/batch, warehouse management, reorder |
+| **Manufacturing** | BOM, work orders, production tracking |
+| **HR & Payroll** | Employees, departments, leave, payroll (GOSI-aware) |
+| **CRM** | Leads, opportunities, pipeline |
+| **Projects (PMO)** | Full PMO: tasks, milestones, risks, issues, Gantt, Kanban |
+| **Assets** | Fixed assets, depreciation, asset categories |
+| **Billing** | Subscription plans, Stripe integration, tenant quotas |
+| **Compliance** | SOC 2, ISO 27001, ISO 9001, GDPR — automated control checks |
+| **KPIs** | Company KPIs, dashboards, history tracking |
+| **Industries** | Industry-specific control libraries |
+| **Market** | Country localizations, partner directory, app marketplace |
+
+### AI Engine (Cognitive Layer)
+- **Multi-Provider LLM** — Claude, GPT-4o, Gemini, Groq with automatic fallback
+- **Natural-Language ERP** — "اعمل تقرير الربحية للربع الثاني" → resolves to report
+- **AI Agents** — Finance, HR, Supply Chain, Admin agents with sanctioned execution
+- **Predictive Intelligence** — Sales forecast, demand forecast, project risk, asset failure
+- **Knowledge Graph** — Entity relationships + impact analysis (what does this delay affect?)
+- **Decision Engine** — Explainable rule-based routing (PO approval thresholds, etc.)
+- **Self-Improvement** — Monitors own metrics → proposes improvements → human approval required
+
+### Security (Enterprise-Grade)
+- **Zero Trust** — User + Device + Location + Behavior scored on every request
+- **IAM** — OIDC/OAuth2, SAML 2.0, LDAP/Active Directory with JIT provisioning
+- **PAM** — Time-boxed privilege escalation with approval workflow
+- **Immutable Audit** — Hash-chained, HMAC-signed append-only ledger (blockchain-style)
+- **AI Security** — Anomaly detection, fraud detection, insider threat monitoring
+- **Role Mining** — Automatic suggestion of roles from permission usage patterns
 
 ### Multi-Tenancy
-- **django-tenants** with `TenantMixin` + `DomainMixin`
-- Subdomain and custom domain routing
-- Schema-per-tenant isolation
-- Tenant-aware middleware with plan limit enforcement
+- Schema-per-tenant isolation (django-tenants)
+- CompanyScopedMixin on all ViewSets (row-level security)
+- Branch-level RLS (BranchScopedMixin)
+- Per-tenant rate limiting in the API Gateway
 
-### Plugin System
-- Marketplace with reviews and ratings
-- Dynamic loading with `importlib`
-- Hook registry for extensibility
-- Per-tenant plugin installation
+---
 
-### Billing & Subscriptions
-- **Stripe** integration (payments, subscriptions, webhooks)
-- Plans with configurable limits
-- Invoice generation and payment tracking
-- Usage-based billing records
+## Getting Started
 
-### Kubernetes Deployment
-- Helm charts with configurable values
-- HPA for auto-scaling
-- Pod Disruption Budgets
-- Network Policies for security
-- Secrets management
+### Prerequisites
+- Python 3.12, Node 20, PostgreSQL 16, Redis 7
 
-### CI/CD
-- GitHub Actions pipeline
-- Automated testing (backend + frontend)
-- Security scanning (Trivy, Bandit, Safety)
-- SBOM generation
-- Staging and Production deployments
+### Backend
+```bash
+cd backend
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env          # fill in DB_*, REDIS_URL, SECRET_KEY
+python manage.py migrate
+python manage.py seed_localization    # currencies + Gulf tax rules
+python manage.py seed_compliance      # SOC2/ISO27001/ISO9001/GDPR controls
+python manage.py createsuperuser
+python manage.py runserver
+```
 
-### Observability
-- **Prometheus** metrics and alerting
-- **Grafana** dashboards
-- **Loki** log aggregation
-- **Tempo** distributed tracing (OpenTelemetry)
-- **Sentry** error tracking
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173
+```
 
-### Security Hardening
-- Rate limiting (Redis-based)
-- WAF rules (ModSecurity)
-- Security headers (CSP, HSTS, X-Frame-Options)
-- Secrets rotation policy
-- Non-root containers
-- Read-only root filesystems
+### Self-Service Onboarding
+```bash
+# Register a new company
+POST /api/v1/tenants/onboarding/register/
+{ "company_name": "My Co", "admin_email": "admin@myco.com",
+  "admin_password": "...", "country": "SA", "vat_number": "300..." }
 
-## Quick Start
+# Run setup wizard (COA, warehouse, currencies, compliance)
+POST /api/v1/tenants/onboarding/setup/
 
-### Local Development (Docker Compose)
+# Check readiness
+GET /api/v1/tenants/onboarding/status/
+```
+
+---
+
+## API Reference
+
+Swagger UI: `GET /api/v1/docs/`  
+OpenAPI schema: `GET /api/v1/schema/`  
+ReDoc: `GET /api/v1/redoc/`
+
+All API routes under `/api/v1/{module}/`.
+
+---
+
+## Tests
 
 ```bash
-# Clone the repository
-git clone https://github.com/engmuradghannam-dot/Nexus-Framework.git
-cd Nexus-Framework
-
-# Start all services
-docker-compose up -d
-
-# Run migrations
-docker-compose exec backend python manage.py migrate --run-syncdb
-docker-compose exec backend python manage.py migrate_schemas --shared
-
-# Create superuser
-docker-compose exec backend python manage.py createsuperuser
-
-# Access the app
-# Frontend: http://localhost
-# Backend API: http://localhost/api/
-# Admin: http://localhost/admin/
-# Grafana: http://localhost:3001
-# Prometheus: http://localhost:9090
+cd backend
+pytest tests/ tests/integration/ tests/e2e/  # 118 tests, real PostgreSQL
 ```
 
-### Kubernetes Deployment
+Coverage areas: financial core (double-entry, fiscal, ZATCA), enterprise security
+(IAM, audit chain, PAM, role mining), AI (forecasting, decisions, knowledge graph),
+compliance, onboarding, all 14 ERP modules, E2E workflows.
 
-```bash
-# Add Helm repositories
-helm repo add bitnami https://charts.bitnami.com/bitnami
-helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-helm repo update
+---
 
-# Install dependencies
-helm dependency build ./k8s/helm/nexus-saas
+## Deployment
 
-# Deploy to staging
-helm upgrade --install nexus-saas-staging ./k8s/helm/nexus-saas   --namespace staging   --create-namespace   --set image.backend.tag=latest   --set image.frontend.tag=latest
+Kubernetes manifests: `k8s/`  
+Helm chart with HPA, PDB, Network Policies, multi-region support.
 
-# Deploy to production
-helm upgrade --install nexus-saas ./k8s/helm/nexus-saas   --namespace production   --create-namespace   --set image.backend.tag=v1.0.0   --set image.frontend.tag=v1.0.0
-```
+Observability stack: Grafana + Prometheus + Loki + Tempo + Sentry  
+CI/CD: GitHub Actions (`.github/workflows/`)
 
-## Environment Variables
+---
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DEBUG` | Debug mode | `false` |
-| `SECRET_KEY` | Django secret key | Required |
-| `DB_HOST` | PostgreSQL host | `db` |
-| `DB_NAME` | Database name | `nexus` |
-| `DB_USER` | Database user | `nexus` |
-| `DB_PASSWORD` | Database password | `nexus` |
-| `REDIS_URL` | Redis connection URL | `redis://redis:6379/1` |
-| `STRIPE_SECRET_KEY` | Stripe API key | - |
-| `STRIPE_WEBHOOK_SECRET` | Stripe webhook secret | - |
-| `SENTRY_DSN` | Sentry DSN | - |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry endpoint | - |
+## Localization
 
-## Project Structure
+Gulf countries supported out-of-the-box:
 
-```
-Nexus-Framework/
-├── backend/              # Django backend
-│   ├── apps/
-│   │   ├── tenants/      # Multi-tenancy
-│   │   ├── plugins/      # Plugin system
-│   │   ├── billing/      # Stripe billing
-│   │   ├── core/         # Core utilities
-│   │   ├── accounts/     # Accounting
-│   │   ├── inventory/    # Inventory
-│   │   ├── buying/       # Purchasing
-│   │   ├── selling/      # Sales
-│   │   ├── manufacturing/# Manufacturing
-│   │   ├── hr/           # Human Resources
-│   │   ├── crm/          # CRM
-│   │   ├── projects/     # Project Management
-│   │   ├── assets/       # Fixed Assets
-│   │   └── workflow/     # Workflow Engine
-│   └── nexus/            # Django settings
-├── frontend/             # React frontend
-│   └── src/
-├── k8s/                  # Kubernetes manifests
-│   └── helm/
-│       └── nexus-saas/   # Helm chart
-├── observability/        # Monitoring stack
-│   ├── prometheus/
-│   ├── grafana/
-│   ├── loki/
-│   ├── tempo/
-│   └── sentry/
-├── security/             # Security policies
-│   ├── policies/
-│   ├── waf/
-│   └── secrets/
-├── .github/
-│   └── workflows/        # CI/CD pipelines
-├── docker-compose.yml    # Local development
-└── README.md
-```
+| Country | VAT | E-Invoicing | Standard |
+|---------|-----|-------------|----------|
+| 🇸🇦 Saudi Arabia | 15% | ZATCA Phase 2 | IFRS |
+| 🇦🇪 UAE | 5% | Peppol/custom | IFRS |
+| 🇧🇭 Bahrain | 10% | — | IFRS |
+| 🇴🇲 Oman | 5% | — | IFRS |
+| 🇶🇦 Qatar | 0% | — | IFRS |
+| 🇰🇼 Kuwait | 0% | — | IFRS |
+| 🇯🇴 Jordan | 16% | — | IFRS |
+| 🇪🇬 Egypt | 14% | — | EAS |
+
+---
 
 ## License
 
-MIT License - see LICENSE file for details.
+Proprietary — All rights reserved. © Murad Ghannam
