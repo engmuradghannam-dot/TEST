@@ -64,6 +64,7 @@ TENANT_APPS = [
     'apps.projects',
     'apps.assets',
     'apps.workflow',
+    'apps.iam',
     'apps.industries',
     'apps.compliance',
     'apps.kpi',

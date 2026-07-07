@@ -1,9 +1,8 @@
-
 """
 API Views for tenant management.
 """
 import logging
-from rest_framework import viewsets, status, permissions
+from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_tenants.utils import schema_context
