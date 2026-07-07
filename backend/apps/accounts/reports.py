@@ -22,10 +22,10 @@ def _line_sums(company, date_from=None, date_to=None):
     if date_to:
         q &= Q(journal_entry__posting_date__lte=date_to)
     rows = (JournalEntryLine.objects.filter(q)
-            .values('account_id', 'account__code', 'account__name',
+            .values('account_id', 'account__account_number', 'account__account_name',
                     'account__account_type')
             .annotate(debit=Sum('debit'), credit=Sum('credit'))
-            .order_by('account__code'))
+            .order_by('account__account_number'))
     return list(rows)
 
 
@@ -40,7 +40,7 @@ def trial_balance(company, as_of=None) -> dict:
         total_debit += row_debit
         total_credit += row_credit
         out.append({
-            'code': r['account__code'], 'account': r['account__name'],
+            'code': r['account__account_number'], 'account': r['account__account_name'],
             'type': r['account__account_type'],
             'debit': row_debit, 'credit': row_credit,
         })
@@ -58,7 +58,7 @@ def income_statement(company, date_from, date_to) -> dict:
     total_income = total_expense = Decimal('0')
     for r in rows:
         net = (r['credit'] or 0) - (r['debit'] or 0)   # credit-normal for income
-        item = {'code': r['account__code'], 'account': r['account__name']}
+        item = {'code': r['account__account_number'], 'account': r['account__account_name']}
         if r['account__account_type'] == 'Income':
             item['amount'] = net
             income.append(item)
@@ -94,8 +94,8 @@ def balance_sheet(company, as_of=None) -> dict:
             continue
         else:
             continue
-        sections[atype].append({'code': r['account__code'],
-                                'account': r['account__name'],
+        sections[atype].append({'code': r['account__account_number'],
+                                'account': r['account__account_name'],
                                 'amount': amount})
         totals[atype] += amount
 

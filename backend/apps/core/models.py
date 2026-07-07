@@ -245,3 +245,10 @@ class UIScreen(models.Model):
 
     def __str__(self):
         return self.title
+
+
+# ── Enterprise security & AI-core models (kept in core app_label) ──
+from apps.core.security.immutable_audit import AuditLedgerEntry  # noqa: E402,F401
+from apps.core.intelligence.knowledge_graph import (  # noqa: E402,F401
+    GraphNode, GraphEdge,
+)

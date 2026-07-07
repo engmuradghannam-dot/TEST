@@ -85,3 +85,9 @@ opentelemetry-exporter-otlp>=1.25
 opentelemetry-instrumentation-django>=0.46b0
 # Event bus
 redis>=5.0
+
+# Enterprise IAM / SSO
+python3-saml>=1.16.0
+ldap3>=2.9.1
+# Compliance / security
+cryptography>=41.0.0

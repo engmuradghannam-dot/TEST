@@ -111,9 +111,8 @@ class Migration(migrations.Migration):
                 ('completed_at', models.DateTimeField(blank=True, null=True)),
             ],
         ),
-        migrations.AlterField(
-            model_name='auditlog',
-            name='user',
+        migrations.RemoveField(model_name='auditlog', name='user'),
+        migrations.AddField(model_name='auditlog', name='user',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='audit_entries', to='core.user'),
         ),
         migrations.CreateModel(

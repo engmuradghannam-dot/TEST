@@ -26,9 +26,8 @@ class Migration(migrations.Migration):
                 'verbose_name_plural': 'currencies',
             },
         ),
-        migrations.AlterField(
-            model_name='journalentry',
-            name='posted_by',
+        migrations.RemoveField(model_name='journalentry', name='posted_by'),
+        migrations.AddField(model_name='journalentry', name='posted_by',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='posted_journal_entries', to='core.user'),
         ),
         migrations.CreateModel(

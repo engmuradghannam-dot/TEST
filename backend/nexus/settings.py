@@ -55,6 +55,8 @@ TENANT_APPS = [
     # Tenant-specific apps
     'apps.core',
     'apps.accounts',
+    'apps.iam',
+    'apps.compliance',
     'apps.inventory',
     'apps.buying',
     'apps.selling',
@@ -93,6 +95,7 @@ MIDDLEWARE = [
     'nexus.middleware.RequestLoggerMiddleware',
     'nexus.middleware.ErrorHandlerMiddleware',
     'nexus.middleware.APIAuthMiddleware',
+    'apps.core.security.zero_trust.ZeroTrustMiddleware',
     'nexus.middleware.ValidationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -444,3 +447,10 @@ WORKFLOW_RETRY_DELAY = 60  # seconds
 
 # State Machine
 STATE_MACHINE_AUDIT_ENABLED = True
+
+
+# ── AI Core & Security configuration ────────────────────────────────
+AI_PROVIDER_ORDER = os.getenv(
+    'AI_PROVIDER_ORDER', 'anthropic,openai,gemini,groq').split(',')
+AUDIT_SIGNING_KEY = os.getenv('AUDIT_SIGNING_KEY', SECRET_KEY)
+ZERO_TRUST_ENABLED = os.getenv('ZERO_TRUST_ENABLED', 'true').lower() == 'true'

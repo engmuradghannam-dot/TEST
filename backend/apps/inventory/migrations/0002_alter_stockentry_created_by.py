@@ -12,9 +12,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterField(
-            model_name='stockentry',
-            name='created_by',
+        migrations.RemoveField(model_name='stockentry', name='created_by'),
+        migrations.AddField(model_name='stockentry', name='created_by',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='core.user'),
         ),
     ]

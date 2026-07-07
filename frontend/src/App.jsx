@@ -13,6 +13,7 @@ import AgentDashboard from './pages/AgentDashboard';
 import PluginMarketplace from './pages/PluginMarketplace';
 import SelfImprovementDashboard from './pages/SelfImprovementDashboard';
 import FinancialReports from './pages/FinancialReports';
+import AICommandCenter from './pages/AICommandCenter';
 import ScreenBuilder from './pages/ScreenBuilder';
 import JournalEntries from './pages/JournalEntries';
 import Budgets from './pages/Budgets';
@@ -68,6 +69,7 @@ function Sidebar({ isOpen, toggleSidebar }) {
     { path: '/agents', label: 'AI Agents', icon: Brain },
     { path: '/plugins', label: 'Plugin Marketplace', icon: Puzzle },
     { path: '/improvements', label: 'Self-Improvement', icon: TrendingUp },
+    { path: '/ai-command', label: 'AI Command Center', icon: Sparkles },
     { path: '/companies', label: 'Companies', icon: Building2 },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];
@@ -282,6 +284,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/finance/reports" element={<FinancialReports />} />
+              <Route path="/ai-command" element={<AICommandCenter />} />
               <Route path="/finance/journal-entries" element={<JournalEntries />} />
               <Route path="/finance/budgets" element={<Budgets />} />
               <Route path="/inventory/items" element={<Items />} />
