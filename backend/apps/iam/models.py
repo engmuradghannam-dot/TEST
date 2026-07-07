@@ -1,3 +1,4 @@
+from django.conf import settings
 """
 Nexus IAM - Identity & Access Management
 Complete implementation with:
@@ -1043,3 +1044,32 @@ class JITAccessRequest(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+
+class ElevationRequest(models.Model):
+    """Lightweight user-level privilege elevation (ERP user roles,
+    not server/infrastructure accounts). Simpler than JITAccessRequest."""
+    STATUS = [('pending', 'Pending'), ('approved', 'Approved'),
+              ('denied', 'Denied'), ('expired', 'Expired'), ('revoked', 'Revoked')]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                             related_name='elevation_requests')
+    role_requested = models.CharField(max_length=100)
+    justification = models.TextField()
+    status = models.CharField(max_length=10, choices=STATUS, default='pending')
+    requested_at = models.DateTimeField(auto_now_add=True)
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                    on_delete=models.SET_NULL,
+                                    related_name='approved_elevations')
+    approved_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    requested_duration_hours = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        ordering = ['-requested_at']
+
+    @property
+    def is_currently_active(self):
+        return (self.status == 'approved' and self.expires_at
+                and timezone.now() < self.expires_at)

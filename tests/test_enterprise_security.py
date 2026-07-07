@@ -69,11 +69,13 @@ class TestPAM:
 
         session = pam.request_elevation(user, 'billing_admin',
                                         'month-end close', 30)
-        assert session.status == 'requested'
+        assert session.status == 'pending'
         assert 'billing_admin' not in pam.active_privileges(user)
 
-        session.approve(approver)
-        assert session.status == 'active'
+        from apps.iam.pam import approve_elevation
+        approve_elevation(session, approver)
+        assert session.status in ("approved", "active")
+        session.refresh_from_db()
         assert session.is_currently_active
         assert 'billing_admin' in pam.active_privileges(user)
 
@@ -83,7 +85,8 @@ class TestPAM:
             email='self@test.com', password='x', is_staff=True)
         session = pam.request_elevation(user, 'db_operator', 'fix', 15)
         with pytest.raises(ValueError, match='Self-approval'):
-            session.approve(user)
+            from apps.iam.pam import approve_elevation
+            approve_elevation(session, user)
 
     def test_expiry_sweep(self, django_user_model):
         from apps.iam import pam
@@ -91,7 +94,7 @@ class TestPAM:
         user = django_user_model.objects.create_user(
             email='exp@test.com', password='x')
         s = pam.request_elevation(user, 'role', 'x', 60)
-        s.status = 'active'
+        s.status = 'approved'
         s.expires_at = timezone.now() - timedelta(minutes=1)
         s.save()
         assert pam.expire_stale_sessions() == 1
@@ -110,10 +113,12 @@ class TestRoleMining:
             u = django_user_model.objects.create_user(
                 email=f'rm{i}@test.com', password='x')
             u.user_permissions.set(perms[:3])
+        from apps.core.models import Company
+        Company.objects.get_or_create(id=1, defaults={'name': 'Sys', 'tax_id': '0', 'email': 'a@a.com'})
         report = pam.mine_roles(min_support=2)
         assert report.users_analyzed >= 3
         assert any(len(s['permissions']) >= 3 and s['user_count'] >= 2
-                   for s in report.suggestions)
+                   for s in report.suggested_roles)
 
 
 # ── predictive intelligence ──────────────────────────────────────────

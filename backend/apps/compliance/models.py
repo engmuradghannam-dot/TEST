@@ -9,7 +9,7 @@ class ComplianceFramework(models.Model):
     category = models.CharField(max_length=100, choices=[
         ('financial', 'Financial'), ('healthcare', 'Healthcare'), ('manufacturing', 'Manufacturing'),
         ('it_security', 'IT Security'), ('environmental', 'Environmental'), ('general', 'General')
-    ])
+    ], default='general')
     description = models.TextField()
     version = models.CharField(max_length=50, blank=True)
     issuing_body = models.CharField(max_length=255, blank=True)
