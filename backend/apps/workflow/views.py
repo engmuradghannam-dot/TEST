@@ -1,4 +1,4 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, filters
 from apps.core.mixins import CompanyScopedMixin
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.decorators import action
