@@ -1,0 +1,954 @@
+# Nexus Distributed Database Strategy
+# Multi-Region: PostgreSQL (primary) + Cassandra (time-series) + Redis (cache) + Elasticsearch (search)
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nexus-data-layer
+  labels:
+    app: nexus
+    tier: data
+
+---
+# PostgreSQL Primary (Multi-Region with Patroni)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nexus-postgres-primary
+  namespace: nexus-data-layer
+spec:
+  serviceName: nexus-postgres-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nexus-postgres
+      role: primary
+  template:
+    metadata:
+      labels:
+        app: nexus-postgres
+        role: primary
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - nexus-postgres
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: postgres
+          image: nexus-framework/postgres-patroni:15.4
+          ports:
+            - containerPort: 5432
+              name: postgres
+            - containerPort: 8008
+              name: patroni
+          env:
+            - name: PATRONI_KUBERNETES_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: PATRONI_KUBERNETES_LABELS
+              value: '{"app": "nexus-postgres"}'
+            - name: PATRONI_SUPERUSER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: nexus-db-credentials
+                  key: superuser
+            - name: PATRONI_SUPERUSER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nexus-db-credentials
+                  key: superuser-password
+            - name: PATRONI_REPLICATION_USERNAME
+              value: replicator
+            - name: PATRONI_REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nexus-db-credentials
+                  key: replication-password
+            - name: PATRONI_SCOPE
+              value: nexus-postgres-cluster
+            - name: PATRONI_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: PATRONI_POSTGRESQL_DATA_DIR
+              value: /data/postgresql
+            - name: PATRONI_POSTGRESQL_PGPASS
+              value: /tmp/pgpass
+            - name: PGDATA
+              value: /data/postgresql
+            - name: POSTGRES_INITDB_ARGS
+              value: "--encoding=UTF8 --locale=en_US.UTF-8"
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /data
+            - name: postgres-config
+              mountPath: /etc/postgresql/postgresql.conf
+              subPath: postgresql.conf
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2000m"
+            limits:
+              memory: "16Gi"
+              cpu: "8000m"
+          livenessProbe:
+            exec:
+              command:
+                - /usr/local/bin/patronictl
+                - -c
+                - /etc/patroni/patroni.yml
+                - list
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - /usr/local/bin/patronictl
+                - -c
+                - /etc/patroni/patroni.yml
+                - list
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: postgres-config
+          configMap:
+            name: nexus-postgres-config
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 500Gi
+
+---
+# PostgreSQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexus-postgres-primary
+  namespace: nexus-data-layer
+  labels:
+    app: nexus-postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: nexus-postgres
+    role: primary
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+
+---
+# PostgreSQL Read Replica Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexus-postgres-replicas
+  namespace: nexus-data-layer
+  labels:
+    app: nexus-postgres
+    role: replica
+spec:
+  type: ClusterIP
+  selector:
+    app: nexus-postgres
+    role: replica
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+
+---
+# PostgreSQL Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nexus-postgres-config
+  namespace: nexus-data-layer
+data:
+  postgresql.conf: |
+    # Nexus PostgreSQL Configuration
+    max_connections = 500
+    shared_buffers = 4GB
+    effective_cache_size = 12GB
+    maintenance_work_mem = 1GB
+    work_mem = 20MB
+    wal_buffers = 64MB
+    min_wal_size = 2GB
+    max_wal_size = 8GB
+    checkpoint_completion_target = 0.9
+    random_page_cost = 1.1
+    effective_io_concurrency = 200
+    default_statistics_target = 100
+    log_min_duration_statement = 1000
+    log_checkpoints = on
+    log_connections = on
+    log_disconnections = on
+    log_lock_waits = on
+    log_temp_files = 0
+    log_autovacuum_min_duration = 0
+    autovacuum_max_workers = 5
+    autovacuum_naptime = 10
+    max_worker_processes = 8
+    max_parallel_workers_per_gather = 4
+    max_parallel_workers = 8
+    max_parallel_maintenance_workers = 4
+    # Multi-Region Replication
+    wal_level = replica
+    hot_standby = on
+    max_wal_senders = 10
+    max_replication_slots = 10
+    hot_standby_feedback = on
+    # Performance
+    synchronous_commit = off
+    fsync = on
+    full_page_writes = on
+    # Partitioning
+    enable_partition_pruning = on
+    enable_partitionwise_join = on
+    enable_partitionwise_aggregate = on
+
+---
+# Cassandra Cluster for Time-Series Data
+apiVersion: cassandra.datastax.com/v1beta1
+kind: CassandraDatacenter
+metadata:
+  name: nexus-cassandra
+  namespace: nexus-data-layer
+spec:
+  clusterName: nexus-cassandra-cluster
+  serverType: dse
+  serverVersion: "6.8.25"
+  managementApiAuth:
+    insecure: false
+  size: 6
+  racks:
+    - name: rack-1a
+      zone: us-east-1a
+    - name: rack-1b
+      zone: us-east-1b
+    - name: rack-1c
+      zone: us-east-1c
+  config:
+    cassandra-yaml:
+      authenticator: org.apache.cassandra.auth.PasswordAuthenticator
+      authorizer: org.apache.cassandra.auth.CassandraAuthorizer
+      role_manager: org.apache.cassandra.auth.CassandraRoleManager
+      num_tokens: 256
+      allocate_tokens_for_local_replication_factor: 3
+      concurrent_reads: 32
+      concurrent_writes: 32
+      concurrent_counter_writes: 32
+      memtable_allocation_type: heap_buffers
+      file_cache_size_in_mb: 512
+      memtable_heap_space_in_mb: 2048
+      memtable_offheap_space_in_mb: 2048
+      compaction_throughput_mb_per_sec: 64
+      sstable_preemptive_open_interval_in_mb: 50
+      read_request_timeout_in_ms: 5000
+      range_request_timeout_in_ms: 10000
+      write_request_timeout_in_ms: 2000
+      counter_write_request_timeout_in_ms: 5000
+      cas_contention_timeout_in_ms: 1000
+      truncate_request_timeout_in_ms: 60000
+      request_timeout_in_ms: 10000
+      slow_query_log_timeout_in_ms: 500
+      phi_convict_threshold: 8
+      cross_node_timeout: true
+      endpoint_snitch: GossipingPropertyFileSnitch
+      dynamic_snitch_update_interval_in_ms: 100
+      dynamic_snitch_reset_interval_in_ms: 600000
+      dynamic_snitch_badness_threshold: 0.1
+      request_scheduler: org.apache.cassandra.scheduler.NoScheduler
+      server_encryption_options:
+        internode_encryption: all
+        keystore: /etc/cassandra/keystore
+        keystore_password: cassandra
+        truststore: /etc/cassandra/truststore
+        truststore_password: cassandra
+        protocol: TLS
+        algorithm: SunX509
+        store_type: JKS
+        cipher_suites: [TLS_RSA_WITH_AES_128_CBC_SHA,TLS_RSA_WITH_AES_256_CBC_SHA]
+      client_encryption_options:
+        enabled: true
+        optional: false
+        keystore: /etc/cassandra/keystore
+        keystore_password: cassandra
+        require_client_auth: true
+        truststore: /etc/cassandra/truststore
+        truststore_password: cassandra
+        protocol: TLS
+        algorithm: SunX509
+        store_type: JKS
+        cipher_suites: [TLS_RSA_WITH_AES_128_CBC_SHA,TLS_RSA_WITH_AES_256_CBC_SHA]
+    dse-yaml:
+      authorization_options:
+        enabled: true
+        transitional_mode: disabled
+        allow_row_level_security: true
+      audit_logging_options:
+        enabled: true
+        logger: BinAuditLogger
+        included_categories: AUTH,DDL,DCL,QUERY
+        excluded_categories: PREPARE
+        included_keyspaces: nexus_events,nexus_audit,nexus_logs
+        retained_archives: 50
+    jvm-options:
+      initial_heap_size: "8G"
+      max_heap_size: "8G"
+      additional-options:
+        - "-XX:+UseG1GC"
+        - "-XX:+UseStringDeduplication"
+        - "-XX:+AlwaysPreTouch"
+        - "-XX:+UseTransparentHugePages"
+        - "-XX:+UseNUMA"
+        - "-XX:+PerfDisableSharedMem"
+  storageConfig:
+    cassandraDataVolumeClaimSpec:
+      storageClassName: gp3
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Ti
+    cassandraLogsVolumeClaimSpec:
+      storageClassName: gp3
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 100Gi
+  resources:
+    requests:
+      memory: "16Gi"
+      cpu: "4000m"
+    limits:
+      memory: "32Gi"
+      cpu: "8000m"
+
+---
+# Cassandra Keyspaces for Nexus
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nexus-cassandra-schema
+  namespace: nexus-data-layer
+data:
+  schema.cql: |
+    CREATE KEYSPACE IF NOT EXISTS nexus_events WITH replication = {'class': 'NetworkTopologyStrategy', 'us-east': 3, 'eu-west': 3};
+    CREATE KEYSPACE IF NOT EXISTS nexus_time_series WITH replication = {'class': 'NetworkTopologyStrategy', 'us-east': 3, 'eu-west': 3};
+    CREATE KEYSPACE IF NOT EXISTS nexus_audit WITH replication = {'class': 'NetworkTopologyStrategy', 'us-east': 3, 'eu-west': 3};
+    CREATE KEYSPACE IF NOT EXISTS nexus_analytics WITH replication = {'class': 'NetworkTopologyStrategy', 'us-east': 3, 'eu-west': 3};
+
+    -- Event Store Tables
+    CREATE TABLE IF NOT EXISTS nexus_events.aggregates (
+      aggregate_id UUID PRIMARY KEY,
+      aggregate_type TEXT,
+      version BIGINT,
+      snapshot BLOB,
+      snapshot_version BIGINT,
+      created_at TIMESTAMP,
+      updated_at TIMESTAMP
+    ) WITH compaction = {'class': 'LeveledCompactionStrategy'};
+
+    CREATE TABLE IF NOT EXISTS nexus_events.events (
+      aggregate_id UUID,
+      version BIGINT,
+      event_type TEXT,
+      event_data BLOB,
+      metadata MAP<TEXT, TEXT>,
+      timestamp TIMESTAMP,
+      region TEXT,
+      PRIMARY KEY (aggregate_id, version)
+    ) WITH CLUSTERING ORDER BY (version ASC)
+      AND compaction = {'class': 'TimeWindowCompactionStrategy', 'compaction_window_unit': 'DAYS', 'compaction_window_size': 7};
+
+    -- Time-Series Tables
+    CREATE TABLE IF NOT EXISTS nexus_time_series.metrics (
+      metric_id TEXT,
+      bucket TIMESTAMP,
+      timestamp TIMESTAMP,
+      value DOUBLE,
+      tags MAP<TEXT, TEXT>,
+      PRIMARY KEY ((metric_id, bucket), timestamp)
+    ) WITH CLUSTERING ORDER BY (timestamp DESC)
+      AND default_time_to_live = 31536000;
+
+    CREATE TABLE IF NOT EXISTS nexus_time_series.kpi_readings (
+      kpi_id TEXT,
+      company_id UUID,
+      bucket TEXT,
+      timestamp TIMESTAMP,
+      value DOUBLE,
+      target_value DOUBLE,
+      status TEXT,
+      PRIMARY KEY ((kpi_id, company_id, bucket), timestamp)
+    ) WITH CLUSTERING ORDER BY (timestamp DESC)
+      AND default_time_to_live = 63072000;
+
+    -- Audit Tables
+    CREATE TABLE IF NOT EXISTS nexus_audit.activity_log (
+      user_id UUID,
+      date_bucket TEXT,
+      timestamp TIMESTAMP,
+      action TEXT,
+      resource_type TEXT,
+      resource_id TEXT,
+      details TEXT,
+      ip_address TEXT,
+      region TEXT,
+      PRIMARY KEY ((user_id, date_bucket), timestamp)
+    ) WITH CLUSTERING ORDER BY (timestamp DESC)
+      AND default_time_to_live = 157788000;
+
+    -- Analytics Tables
+    CREATE TABLE IF NOT EXISTS nexus_analytics.daily_aggregates (
+      aggregate_type TEXT,
+      date DATE,
+      company_id UUID,
+      region TEXT,
+      metrics MAP<TEXT, DOUBLE>,
+      counts MAP<TEXT, BIGINT>,
+      PRIMARY KEY ((aggregate_type, date), company_id, region)
+    ) WITH compaction = {'class': 'TimeWindowCompactionStrategy', 'compaction_window_unit': 'DAYS', 'compaction_window_size': 30};
+
+---
+# Redis Cluster (Cache & Session Store)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nexus-redis
+  namespace: nexus-data-layer
+spec:
+  serviceName: nexus-redis-headless
+  replicas: 6
+  selector:
+    matchLabels:
+      app: nexus-redis
+  template:
+    metadata:
+      labels:
+        app: nexus-redis
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - nexus-redis
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: redis
+          image: redis:7.2-alpine
+          ports:
+            - containerPort: 6379
+              name: redis
+            - containerPort: 16379
+              name: cluster
+          command:
+            - redis-server
+            - /etc/redis/redis.conf
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+            - name: redis-config
+              mountPath: /etc/redis
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1000m"
+            limits:
+              memory: "8Gi"
+              cpu: "4000m"
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 100Gi
+
+---
+# Redis Config
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nexus-redis-config
+  namespace: nexus-data-layer
+data:
+  redis.conf: |
+    port 6379
+    cluster-enabled yes
+    cluster-config-file nodes.conf
+    cluster-node-timeout 5000
+    appendonly yes
+    appendfsync everysec
+    maxmemory 6gb
+    maxmemory-policy allkeys-lru
+    save 900 1
+    save 300 10
+    save 60 10000
+    tcp-keepalive 300
+    timeout 0
+    supervised no
+    pidfile /var/run/redis.pid
+    loglevel notice
+    databases 16
+    # Multi-Region
+    cluster-require-full-coverage no
+    cluster-migration-barrier 1
+    # Performance
+    io-threads 4
+    io-threads-do-reads yes
+    # Security
+    requirepass ${REDIS_PASSWORD}
+    masterauth ${REDIS_PASSWORD}
+
+---
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexus-redis
+  namespace: nexus-data-layer
+  labels:
+    app: nexus-redis
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: nexus-redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+    - port: 16379
+      targetPort: 16379
+      name: cluster
+
+---
+# Elasticsearch Cluster for Search & Analytics
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: nexus-elasticsearch
+  namespace: nexus-data-layer
+spec:
+  version: 8.11.0
+  nodeSets:
+    - name: master
+      count: 3
+      config:
+        node.roles: ["master"]
+        xpack.ml.enabled: true
+      podTemplate:
+        spec:
+          containers:
+            - name: elasticsearch
+              resources:
+                requests:
+                  memory: "4Gi"
+                  cpu: "1000m"
+                limits:
+                  memory: "8Gi"
+                  cpu: "2000m"
+      volumeClaimTemplates:
+        - metadata:
+            name: elasticsearch-data
+          spec:
+            storageClassName: gp3
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 100Gi
+    - name: hot
+      count: 3
+      config:
+        node.roles: ["data_hot", "data_content", "ingest"]
+        node.attr.temp: hot
+      podTemplate:
+        spec:
+          containers:
+            - name: elasticsearch
+              resources:
+                requests:
+                  memory: "8Gi"
+                  cpu: "2000m"
+                limits:
+                  memory: "16Gi"
+                  cpu: "4000m"
+      volumeClaimTemplates:
+        - metadata:
+            name: elasticsearch-data
+          spec:
+            storageClassName: gp3
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 500Gi
+    - name: warm
+      count: 2
+      config:
+        node.roles: ["data_warm"]
+        node.attr.temp: warm
+      podTemplate:
+        spec:
+          containers:
+            - name: elasticsearch
+              resources:
+                requests:
+                  memory: "4Gi"
+                  cpu: "1000m"
+                limits:
+                  memory: "8Gi"
+                  cpu: "2000m"
+      volumeClaimTemplates:
+        - metadata:
+            name: elasticsearch-data
+          spec:
+            storageClassName: gp3
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 2Ti
+    - name: cold
+      count: 1
+      config:
+        node.roles: ["data_cold", "frozen"]
+        node.attr.temp: cold
+      podTemplate:
+        spec:
+          containers:
+            - name: elasticsearch
+              resources:
+                requests:
+                  memory: "2Gi"
+                  cpu: "500m"
+                limits:
+                  memory: "4Gi"
+                  cpu: "1000m"
+      volumeClaimTemplates:
+        - metadata:
+            name: elasticsearch-data
+          spec:
+            storageClassName: gp3
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 5Ti
+  transport:
+    service:
+      metadata:
+        annotations:
+          service.beta.kubernetes.io/aws-load-balancer-type: nlb
+  http:
+    service:
+      metadata:
+        annotations:
+          service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    tls:
+      selfSignedCertificate:
+        disabled: true
+
+---
+# Elasticsearch Index Templates
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nexus-es-index-templates
+  namespace: nexus-data-layer
+data:
+  nexus-logs.json: |
+    {
+      "index_patterns": ["nexus-logs-*"],
+      "template": {
+        "settings": {
+          "number_of_shards": 3,
+          "number_of_replicas": 1,
+          "index.lifecycle.name": "nexus-logs-policy",
+          "index.lifecycle.rollover_alias": "nexus-logs"
+        },
+        "mappings": {
+          "properties": {
+            "@timestamp": { "type": "date" },
+            "level": { "type": "keyword" },
+            "message": { "type": "text" },
+            "service": { "type": "keyword" },
+            "region": { "type": "keyword" },
+            "tenant_id": { "type": "keyword" },
+            "trace_id": { "type": "keyword" },
+            "user_id": { "type": "keyword" }
+          }
+        }
+      }
+    }
+  nexus-audit.json: |
+    {
+      "index_patterns": ["nexus-audit-*"],
+      "template": {
+        "settings": {
+          "number_of_shards": 3,
+          "number_of_replicas": 1,
+          "index.lifecycle.name": "nexus-audit-policy",
+          "index.lifecycle.rollover_alias": "nexus-audit"
+        },
+        "mappings": {
+          "properties": {
+            "@timestamp": { "type": "date" },
+            "action": { "type": "keyword" },
+            "resource_type": { "type": "keyword" },
+            "resource_id": { "type": "keyword" },
+            "user_id": { "type": "keyword" },
+            "company_id": { "type": "keyword" },
+            "region": { "type": "keyword" },
+            "ip_address": { "type": "ip" },
+            "details": { "type": "object" }
+          }
+        }
+      }
+    }
+  nexus-search.json: |
+    {
+      "index_patterns": ["nexus-search-*"],
+      "template": {
+        "settings": {
+          "number_of_shards": 5,
+          "number_of_replicas": 1
+        },
+        "mappings": {
+          "properties": {
+            "@timestamp": { "type": "date" },
+            "entity_type": { "type": "keyword" },
+            "entity_id": { "type": "keyword" },
+            "title": { "type": "text", "analyzer": "standard" },
+            "content": { "type": "text", "analyzer": "standard" },
+            "tags": { "type": "keyword" },
+            "company_id": { "type": "keyword" },
+            "tenant_id": { "type": "keyword" },
+            "region": { "type": "keyword" }
+          }
+        }
+      }
+    }
+
+---
+# ILM Policies
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nexus-es-ilm-policies
+  namespace: nexus-data-layer
+data:
+  logs-policy.json: |
+    {
+      "policy": {
+        "phases": {
+          "hot": {
+            "min_age": "0ms",
+            "actions": {
+              "rollover": {
+                "max_primary_shard_size": "50gb",
+                "max_age": "1d",
+                "max_docs": 100000000
+              },
+              "set_priority": { "priority": 100 }
+            }
+          },
+          "warm": {
+            "min_age": "7d",
+            "actions": {
+              "set_priority": { "priority": 50 },
+              "shrink": { "number_of_shards": 1 },
+              "forcemerge": { "max_num_segments": 1 }
+            }
+          },
+          "cold": {
+            "min_age": "30d",
+            "actions": {
+              "set_priority": { "priority": 0 },
+              "freeze": {},
+              "allocate": {
+                "require": { "temp": "cold" }
+              }
+            }
+          },
+          "delete": {
+            "min_age": "90d",
+            "actions": {
+              "delete": {}
+            }
+          }
+        }
+      }
+    }
+  audit-policy.json: |
+    {
+      "policy": {
+        "phases": {
+          "hot": {
+            "min_age": "0ms",
+            "actions": {
+              "rollover": {
+                "max_primary_shard_size": "50gb",
+                "max_age": "1d"
+              },
+              "set_priority": { "priority": 100 }
+            }
+          },
+          "warm": {
+            "min_age": "30d",
+            "actions": {
+              "set_priority": { "priority": 50 }
+            }
+          },
+          "cold": {
+            "min_age": "365d",
+            "actions": {
+              "set_priority": { "priority": 0 },
+              "allocate": {
+                "require": { "temp": "cold" }
+              }
+            }
+          },
+          "delete": {
+            "min_age": "2555d",
+            "actions": { "delete": {} }
+          }
+        }
+      }
+    }
+
+---
+# Database Migration Job (Django)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nexus-db-migrate
+  namespace: nexus-data-layer
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: nexus-framework/backend:v2.0.0
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nexus-db-credentials
+                  key: url
+            - name: DJANGO_SETTINGS_MODULE
+              value: "nexus.settings_prod"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+
+---
+# Database Seed Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nexus-db-seed
+  namespace: nexus-data-layer
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "-4"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: seed
+          image: nexus-framework/backend:v2.0.0
+          command: ["python", "manage.py", "seed_industries"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nexus-db-credentials
+                  key: url
+            - name: DJANGO_SETTINGS_MODULE
+              value: "nexus.settings_prod"
+
+---
+# Backup CronJob
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nexus-db-backup
+  namespace: nexus-data-layer
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: nexus-framework/postgres-backup:15
+              env:
+                - name: PGHOST
+                  value: "nexus-postgres-primary"
+                - name: PGPORT
+                  value: "5432"
+                - name: PGDATABASE
+                  value: "nexus"
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: nexus-db-credentials
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: nexus-db-credentials
+                      key: password
+                - name: BACKUP_BUCKET
+                  value: "s3://nexus-backups/postgres/"
+                - name: BACKUP_RETENTION_DAYS
+                  value: "30"
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+                  pg_dump -Fc $PGDATABASE > /tmp/backup_$TIMESTAMP.dump
+                  aws s3 cp /tmp/backup_$TIMESTAMP.dump $BACKUP_BUCKET
+                  aws s3 ls $BACKUP_BUCKET | sort | head -n -$BACKUP_RETENTION_DAYS | awk '{print $4}' | xargs -I {} aws s3 rm $BACKUP_BUCKET{}
+              resources:
+                requests:
+                  memory: "1Gi"
+                  cpu: "500m"
+                limits:
+                  memory: "4Gi"
+                  cpu: "2000m"

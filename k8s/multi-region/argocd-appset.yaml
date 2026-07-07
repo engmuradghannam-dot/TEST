@@ -1,0 +1,62 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: nexus-multi-region
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: nexus-us-east-1
+            url: https://nexus-us-east-1.eks.amazonaws.com
+            region: us-east-1
+            replicaCount: 3
+          - cluster: nexus-eu-west-1
+            url: https://nexus-eu-west-1.eks.amazonaws.com
+            region: eu-west-1
+            replicaCount: 2
+          - cluster: nexus-me-south-1
+            url: https://nexus-me-south-1.eks.amazonaws.com
+            region: me-south-1
+            replicaCount: 2
+  template:
+    metadata:
+      name: 'nexus-{{region}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/engmuradghannam-dot/Nexus-Framework.git
+        targetRevision: main
+        path: k8s/helm/nexus-saas
+        helm:
+          valueFiles:
+            - values.yaml
+            - 'values-{{region}}.yaml'
+          parameters:
+            - name: global.region.name
+              value: '{{region}}'
+            - name: global.region.replicaCount
+              value: '{{replicaCount}}'
+      destination:
+        server: '{{url}}'
+        namespace: nexus
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+          allowEmpty: false
+        syncOptions:
+          - CreateNamespace=true
+          - PrunePropagationPolicy=foreground
+          - PruneLast=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/replicas

@@ -245,3 +245,186 @@ class UIScreen(models.Model):
 
     def __str__(self):
         return self.title
+
+
+# === Event Sourcing & Distributed Architecture Models ===
+from django.db import models
+import uuid
+from django.utils import timezone
+
+class EventStore(models.Model):
+    """Event Store for Event Sourcing Pattern"""
+    EVENT_TYPES = [
+        ('created', 'Created'),
+        ('updated', 'Updated'),
+        ('deleted', 'Deleted'),
+        ('command', 'Command'),
+        ('snapshot', 'Snapshot'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4)
+    aggregate_id = models.UUIDField(db_index=True)
+    aggregate_type = models.CharField(max_length=100, db_index=True)
+    version = models.PositiveIntegerField(db_index=True)
+    event_type = models.CharField(max_length=50, choices=EVENT_TYPES)
+    event_data = models.JSONField()
+    metadata = models.JSONField(default=dict, blank=True)
+    region = models.CharField(max_length=50, default='us-east-1')
+    timestamp = models.DateTimeField(default=timezone.now, db_index=True)
+    correlation_id = models.UUIDField(null=True, blank=True, db_index=True)
+    causation_id = models.UUIDField(null=True, blank=True)
+    user_id = models.UUIDField(null=True, blank=True)
+    tenant_id = models.UUIDField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        ordering = ['aggregate_id', 'version']
+        unique_together = ['aggregate_id', 'version']
+        indexes = [
+            models.Index(fields=['aggregate_type', 'timestamp']),
+            models.Index(fields=['tenant_id', 'timestamp']),
+            models.Index(fields=['event_type', 'timestamp']),
+            models.Index(fields=['region', 'timestamp']),
+        ]
+        db_table = 'event_store'
+
+class AggregateSnapshot(models.Model):
+    """Snapshots for performance optimization"""
+    aggregate_id = models.UUIDField(primary_key=True)
+    aggregate_type = models.CharField(max_length=100)
+    version = models.PositiveIntegerField()
+    state = models.JSONField()
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    region = models.CharField(max_length=50, default='us-east-1')
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['aggregate_type', 'updated_at']),
+        ]
+        db_table = 'aggregate_snapshots'
+
+class Projection(models.Model):
+    """CQRS Read Model Projections"""
+    projection_id = models.UUIDField(primary_key=True, default=uuid.uuid4)
+    projection_name = models.CharField(max_length=255, db_index=True)
+    projection_type = models.CharField(max_length=100)
+    aggregate_id = models.UUIDField(db_index=True)
+    aggregate_type = models.CharField(max_length=100)
+    data = models.JSONField()
+    version = models.PositiveIntegerField(default=0)
+    is_stale = models.BooleanField(default=False)
+    last_event_timestamp = models.DateTimeField(null=True, blank=True)
+    region = models.CharField(max_length=50, default='us-east-1')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['projection_name', 'aggregate_type']),
+            models.Index(fields=['aggregate_id', 'projection_name']),
+            models.Index(fields=['is_stale', 'updated_at']),
+        ]
+        db_table = 'projections'
+
+class SagaInstance(models.Model):
+    """Saga Orchestrator for Distributed Transactions"""
+    STATUS_CHOICES = [
+        ('started', 'Started'),
+        ('running', 'Running'),
+        ('completed', 'Completed'),
+        ('compensating', 'Compensating'),
+        ('compensated', 'Compensated'),
+        ('failed', 'Failed'),
+    ]
+
+    saga_id = models.UUIDField(primary_key=True, default=uuid.uuid4)
+    saga_type = models.CharField(max_length=100)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='started')
+    current_step = models.PositiveIntegerField(default=0)
+    total_steps = models.PositiveIntegerField(default=0)
+    steps_data = models.JSONField(default=list)
+    compensation_data = models.JSONField(default=list)
+    context = models.JSONField(default=dict)
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    failed_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True)
+    region = models.CharField(max_length=50, default='us-east-1')
+    tenant_id = models.UUIDField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['saga_type', 'status']),
+            models.Index(fields=['tenant_id', 'status']),
+            models.Index(fields=['started_at']),
+        ]
+        db_table = 'saga_instances'
+
+class OutboxEvent(models.Model):
+    """Outbox Pattern for Reliable Event Publishing"""
+    id = models.BigAutoField(primary_key=True)
+    aggregate_type = models.CharField(max_length=100)
+    aggregate_id = models.UUIDField()
+    event_type = models.CharField(max_length=100)
+    payload = models.JSONField()
+    headers = models.JSONField(default=dict)
+    destination_topic = models.CharField(max_length=255)
+    partition_key = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    retry_count = models.PositiveIntegerField(default=0)
+    error = models.TextField(blank=True)
+    region = models.CharField(max_length=50, default='us-east-1')
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['processed_at', 'created_at']),
+            models.Index(fields=['destination_topic', 'processed_at']),
+        ]
+        ordering = ['created_at']
+        db_table = 'outbox_events'
+
+class MultiRegionSync(models.Model):
+    """Track cross-region data synchronization"""
+    SYNC_TYPES = [
+        ('full', 'Full Sync'),
+        ('incremental', 'Incremental'),
+        ('conflict_resolution', 'Conflict Resolution'),
+    ]
+
+    sync_id = models.UUIDField(primary_key=True, default=uuid.uuid4)
+    source_region = models.CharField(max_length=50)
+    target_region = models.CharField(max_length=50)
+    sync_type = models.CharField(max_length=20, choices=SYNC_TYPES)
+    entity_type = models.CharField(max_length=100)
+    entity_id = models.UUIDField()
+    data_hash = models.CharField(max_length=64)
+    status = models.CharField(max_length=20, default='pending')
+    conflict_detected = models.BooleanField(default=False)
+    conflict_resolution = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    synced_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['source_region', 'target_region']),
+            models.Index(fields=['entity_type', 'status']),
+            models.Index(fields=['synced_at']),
+        ]
+        db_table = 'multi_region_sync'
+
+class DistributedLock(models.Model):
+    """Distributed Lock for Multi-Region Coordination"""
+    lock_key = models.CharField(max_length=255, primary_key=True)
+    owner = models.CharField(max_length=255)
+    region = models.CharField(max_length=50)
+    acquired_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_released = models.BooleanField(default=False)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['expires_at', 'is_released']),
+        ]
+        db_table = 'distributed_locks'

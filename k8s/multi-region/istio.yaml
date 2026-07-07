@@ -1,0 +1,96 @@
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: nexus-backend-dr
+spec:
+  host: nexus-backend
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 1000
+    loadBalancer:
+      simple: LEAST_CONN
+      localityLbSetting:
+        enabled: true
+        failover:
+          - from: us-east-1
+            to: eu-west-1
+          - from: eu-west-1
+            to: us-east-1
+          - from: me-south-1
+            to: eu-west-1
+        distribute:
+          - from: "*"
+            to:
+              "us-east-1": 50
+              "eu-west-1": 30
+              "me-south-1": 20
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+    portLevelSettings:
+      - port:
+          number: 50051
+        connectionPool:
+          http:
+            h2UpgradePolicy: UPGRADE
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: nexus-backend-vs
+spec:
+  hosts:
+    - nexus-backend
+    - api.nexus-framework.com
+  http:
+    - match:
+        - headers:
+            x-canary:
+              exact: "true"
+      route:
+        - destination:
+            host: nexus-backend
+            subset: canary
+          weight: 100
+    - route:
+        - destination:
+            host: nexus-backend
+            subset: stable
+          weight: 95
+        - destination:
+            host: nexus-backend
+            subset: canary
+          weight: 5
+      retries:
+        attempts: 3
+        perTryTimeout: 2s
+        retryOn: gateway-error,connect-failure,refused-stream
+      timeout: 10s
+      fault:
+        delay:
+          percentage:
+            value: 0.1
+          fixedDelay: 5s
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: nexus-backend-mtls
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: backend
+  mtls:
+    mode: STRICT

@@ -1,0 +1,505 @@
+# Nexus Multi-Region Kubernetes Architecture
+# Supports: us-east-1, eu-west-1, ap-southeast-1, me-south-1 (Bahrain)
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nexus-global
+  labels:
+    app: nexus
+    tier: global
+
+---
+# Global Load Balancer (GSLB) with Geo-DNS
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gslb-config
+  namespace: nexus-global
+data:
+  regions.yaml: |
+    regions:
+      - name: us-east-1
+        cluster: nexus-us-east
+        endpoint: https://nexus-us.nexus-framework.com
+        weight: 40
+        health_check: /api/health/
+      - name: eu-west-1
+        cluster: nexus-eu-west
+        endpoint: https://nexus-eu.nexus-framework.com
+        weight: 30
+        health_check: /api/health/
+      - name: ap-southeast-1
+        cluster: nexus-ap-southeast
+        endpoint: https://nexus-ap.nexus-framework.com
+        weight: 20
+        health_check: /api/health/
+      - name: me-south-1
+        cluster: nexus-me-south
+        endpoint: https://nexus-me.nexus-framework.com
+        weight: 10
+        health_check: /api/health/
+    failover:
+      primary: us-east-1
+      secondary: eu-west-1
+      tertiary: ap-southeast-1
+      quaternary: me-south-1
+    geo_routing:
+      enabled: true
+      rules:
+        - region: "US.*"
+          target: us-east-1
+        - region: "EU.*|GB.*|DE.*|FR.*"
+          target: eu-west-1
+        - region: "SG.*|AU.*|JP.*|KR.*"
+          target: ap-southeast-1
+        - region: "SA.*|AE.*|QA.*|BH.*|KW.*|OM.*"
+          target: me-south-1
+
+---
+# Multi-Region Ingress with Anycast
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nexus-global-ingress
+  namespace: nexus-global
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/rate-limit: "1000"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type, X-Tenant-ID"
+    cert-manager.io/cluster-issuer: "letsencrypt-global"
+    external-dns.alpha.kubernetes.io/hostname: "nexus.nexus-framework.com"
+spec:
+  tls:
+    - hosts:
+        - nexus.nexus-framework.com
+        - api.nexus-framework.com
+        - *.nexus-framework.com
+      secretName: nexus-global-tls
+  rules:
+    - host: nexus.nexus-framework.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nexus-frontend-service
+                port:
+                  number: 80
+    - host: api.nexus-framework.com
+      http:
+        paths:
+          - path: /api/
+            pathType: Prefix
+            backend:
+              service:
+                name: nexus-api-gateway
+                port:
+                  number: 8000
+
+---
+# Regional Deployment Template
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexus-backend
+  namespace: nexus-global
+  labels:
+    app: nexus-backend
+    version: v2.0.0
+spec:
+  replicas: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: nexus-backend
+  template:
+    metadata:
+      labels:
+        app: nexus-backend
+        version: v2.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - nexus-backend
+                topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: topology.kubernetes.io/region
+                    operator: In
+                    values:
+                      - us-east-1
+                      - eu-west-1
+                      - ap-southeast-1
+                      - me-south-1
+      containers:
+        - name: nexus-backend
+          image: nexus-framework/backend:v2.0.0
+          ports:
+            - containerPort: 8000
+              name: http
+            - containerPort: 9090
+              name: metrics
+          env:
+            - name: DJANGO_SETTINGS_MODULE
+              value: "nexus.settings_prod"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nexus-db-credentials
+                  key: url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nexus-cache-credentials
+                  key: url
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: event-bus-config
+                  key: bootstrap.servers
+            - name: REGION
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['topology.kubernetes.io/region']
+            - name: MULTI_REGION_ENABLED
+              value: "true"
+            - name: CASSANDRA_CONTACT_POINTS
+              valueFrom:
+                configMapKeyRef:
+                  name: distributed-db-config
+                  key: cassandra.contact.points
+            - name: CASSANDRA_LOCAL_DC
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['topology.kubernetes.io/region']
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1000m"
+            limits:
+              memory: "4Gi"
+              cpu: "2000m"
+          livenessProbe:
+            httpGet:
+              path: /api/health/
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health/ready/
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: nexus-config
+              mountPath: /app/config
+            - name: nexus-logs
+              mountPath: /app/logs
+      volumes:
+        - name: nexus-config
+          configMap:
+            name: nexus-app-config
+        - name: nexus-logs
+          emptyDir: {}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: nexus-backend
+
+---
+# Horizontal Pod Autoscaler per Region
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nexus-backend-hpa
+  namespace: nexus-global
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nexus-backend
+  minReplicas: 3
+  maxReplicas: 50
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Pods
+      pods:
+        metric:
+          name: http_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "1000"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+
+---
+# Pod Disruption Budget for High Availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: nexus-backend-pdb
+  namespace: nexus-global
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: nexus-backend
+
+---
+# Network Policy for Inter-Region Security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nexus-backend-network-policy
+  namespace: nexus-global
+spec:
+  podSelector:
+    matchLabels:
+      app: nexus-backend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: nexus-global
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 9090
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: nexus-global
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 9042
+        - protocol: TCP
+          port: 9092
+
+---
+# Istio Service Mesh for Cross-Region Traffic
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: nexus-backend-dr
+  namespace: nexus-global
+spec:
+  host: nexus-backend
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 100
+    loadBalancer:
+      simple: LEAST_CONN
+      localityLbSetting:
+        enabled: true
+        failover:
+          - from: us-east-1
+            to: eu-west-1
+          - from: eu-west-1
+            to: us-east-1
+          - from: ap-southeast-1
+            to: eu-west-1
+          - from: me-south-1
+            to: eu-west-1
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+  subsets:
+    - name: stable
+      labels:
+        version: v2.0.0
+    - name: canary
+      labels:
+        version: v2.0.1
+
+---
+# VirtualService for Canary Deployments across Regions
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: nexus-backend-vs
+  namespace: nexus-global
+spec:
+  hosts:
+    - nexus-backend
+  http:
+    - match:
+        - headers:
+            x-canary:
+              exact: "true"
+      route:
+        - destination:
+            host: nexus-backend
+            subset: canary
+          weight: 100
+    - route:
+        - destination:
+            host: nexus-backend
+            subset: stable
+          weight: 95
+        - destination:
+            host: nexus-backend
+            subset: canary
+          weight: 5
+      retries:
+        attempts: 3
+        perTryTimeout: 2s
+        retryOn: gateway-error,connect-failure,refused-stream
+      timeout: 10s
+      fault:
+        delay:
+          percentage:
+            value: 0.1
+          fixedDelay: 5s
+
+---
+# Cross-Region Service Mesh Gateway
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: nexus-global-gateway
+  namespace: nexus-global
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: nexus-global-tls
+      hosts:
+        - "*.nexus-framework.com"
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*.nexus-framework.com"
+      tls:
+        httpsRedirect: true
+
+---
+# Multi-Region Cluster Federation
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: nexus-us-east
+  namespace: nexus-global
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+        - "10.0.0.0/16"
+    serviceDomain: "cluster.local"
+    services:
+      cidrBlocks:
+        - "10.128.0.0/12"
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+    kind: KubeadmControlPlane
+    name: nexus-us-east-control-plane
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: AWSCluster
+    name: nexus-us-east
+
+---
+# Regional Node Pool with Spot Instances
+apiVersion: karpenter.sh/v1alpha5
+kind: Provisioner
+metadata:
+  name: nexus-regional-provisioner
+  namespace: nexus-global
+spec:
+  requirements:
+    - key: karpenter.sh/capacity-type
+      operator: In
+      values: ["spot", "on-demand"]
+    - key: node.kubernetes.io/instance-type
+      operator: In
+      values: ["m6i.xlarge", "m6i.2xlarge", "c6i.xlarge", "c6i.2xlarge"]
+    - key: topology.kubernetes.io/region
+      operator: In
+      values: ["us-east-1", "eu-west-1", "ap-southeast-1", "me-south-1"]
+  limits:
+    resources:
+      cpu: 1000
+      memory: 4000Gi
+  ttlSecondsAfterEmpty: 30
+  ttlSecondsUntilExpired: 86400
+  weight: 10
