@@ -5,8 +5,7 @@ import {
   LayoutDashboard, Workflow, Brain, Puzzle, TrendingUp,
   Settings, Menu, X, MessageSquare, Bot, Sparkles,
   BookOpen, Boxes, ShoppingCart, Receipt, Factory, Users2, Contact2,
-  FolderKanban, Building2, PencilRuler, BarChart3,
-} from 'lucide-react';
+  FolderKanban, Building2, PencilRuler, BarChart3, ChevronRight } from 'lucide-react';
 import AIAssistant from './components/AIAssistant';
 import WorkflowBuilder from './pages/WorkflowBuilder';
 import AgentDashboard from './pages/AgentDashboard';
@@ -14,6 +13,7 @@ import PluginMarketplace from './pages/PluginMarketplace';
 import SelfImprovementDashboard from './pages/SelfImprovementDashboard';
 import FinancialReports from './pages/FinancialReports';
 import AICommandCenter from './pages/AICommandCenter';
+import Onboarding from './pages/Onboarding';
 import ScreenBuilder from './pages/ScreenBuilder';
 import JournalEntries from './pages/JournalEntries';
 import Budgets from './pages/Budgets';
@@ -74,6 +74,7 @@ function Sidebar({ isOpen, toggleSidebar }) {
     { path: '/plugins', label: 'Plugin Marketplace', icon: Puzzle },
     { path: '/improvements', label: 'Self-Improvement', icon: TrendingUp },
     { path: '/ai-command', label: 'AI Command Center', icon: Sparkles },
+    { path: '/onboarding', label: 'Onboarding Wizard', icon: ChevronRight },
     { path: '/companies', label: 'Companies', icon: Building2 },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];
@@ -289,6 +290,7 @@ export default function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/finance/reports" element={<FinancialReports />} />
               <Route path="/ai-command" element={<AICommandCenter />} />
+              <Route path="/onboarding" element={<Onboarding />} />
               <Route path="/finance/journal-entries" element={<JournalEntries />} />
               <Route path="/finance/budgets" element={<Budgets />} />
               <Route path="/inventory/items" element={<Items />} />

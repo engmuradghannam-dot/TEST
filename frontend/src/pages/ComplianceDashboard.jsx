@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, AlertCircle, CheckCircle, Clock, FileText, TrendingUp, TrendingDown, Activity, BarChart3 } from 'lucide-react';
-import { api } from '../lib/api';
+import api from '../lib/api';
 
 export default function ComplianceDashboard() {
   const [frameworks, setFrameworks] = useState([]);

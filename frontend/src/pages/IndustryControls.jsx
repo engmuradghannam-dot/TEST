@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Shield, CheckCircle, AlertTriangle, Brain, FileText, Activity, Play, Filter, Search } from 'lucide-react';
-import { api } from '../lib/api';
+import api from '../lib/api';
 
 export default function IndustryControls() {
   const { industryId } = useParams();
