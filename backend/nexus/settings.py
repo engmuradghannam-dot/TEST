@@ -39,6 +39,8 @@ SHARED_APPS = [
     'apps.tenants',
     'apps.plugins',
     'apps.billing',
+    'apps.market',
+    'apps.security_engine',
     'apps.core',
 ]
 
@@ -66,7 +68,6 @@ TENANT_APPS = [
     'apps.projects',
     'apps.assets',
     'apps.workflow',
-    'apps.iam',
     'apps.industries',
     'apps.kpi',
     'apps.events',

@@ -5,7 +5,8 @@ from .views import (
     RoleMiningJobViewSet, PermissionAnomalyViewSet,
     PrivilegedAccountViewSet, PrivilegedSessionViewSet,
     PasswordVaultViewSet, SecurityEventViewSet,
-    ServiceAccountViewSet, JITAccessRequestViewSet
+    ServiceAccountViewSet, JITAccessRequestViewSet,
+    SAMLAuthView, SAMLACSView, OAuthCallbackView, LDAPSyncView
 )
 
 router = DefaultRouter()

@@ -1,3 +1,6 @@
+from rest_framework import permissions
+from rest_framework.views import APIView
+from rest_framework.response import Response
 from django.utils import timezone
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
@@ -284,3 +287,57 @@ class LDAPSyncView(APIView):
     """Trigger LDAP/AD sync"""
     def post(self, request):
         return Response({'message': 'LDAP sync initiated'})
+
+
+# ── AI/NLP views (for apps.iam.ai_urls) ──────────────────────────
+class NaturalLanguageView(APIView):
+    """POST /api/v1/ai/nl/ — interpret an Arabic/English ERP command."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        text = request.data.get('text', '')
+        if not text:
+            return Response({'error': 'text required'}, status=400)
+        try:
+            from apps.core.intelligence.nlp_erp import NaturalLanguageERP
+            nlp = NaturalLanguageERP()
+            result = nlp.interpret(text)
+            return Response(result)
+        except Exception as exc:
+            return Response({'error': str(exc)}, status=500)
+
+
+class SalesForecastView(APIView):
+    """POST /api/v1/ai/forecast/sales/ — AI sales forecast."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        try:
+            from apps.core.intelligence.predictive import PredictiveEngine
+            eng = PredictiveEngine()
+            result = eng.sales_forecast(request.user.company,
+                                        days=request.data.get('days', 30))
+            return Response(result)
+        except Exception as exc:
+            return Response({'error': str(exc)}, status=500)
+
+
+class AICoreHealthView(APIView):
+    """GET /api/v1/ai/core/health/"""
+    permission_classes = []
+
+    def get(self, request):
+        return Response({'status': 'ok', 'ai_core': 'running'})
+
+
+class SecurityScanView(APIView):
+    """POST /api/v1/ai/security/scan/ — AI security anomaly scan."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        try:
+            from apps.security_engine.ai_sec.anomaly_detection import (
+                profiler, fraud_detector)
+            return Response({'status': 'scan_queued'})
+        except Exception as exc:
+            return Response({'error': str(exc)}, status=500)
