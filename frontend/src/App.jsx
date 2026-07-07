@@ -36,6 +36,10 @@ import TimeTracking from './pages/TimeTracking';
 import Assets from './pages/Assets';
 import Companies from './pages/Companies';
 
+import IndustrySelector from './pages/IndustrySelector';
+import IndustryControls from './pages/IndustryControls';
+import ComplianceDashboard from './pages/ComplianceDashboard';
+import KPIDashboard from './pages/KPIDashboard';
 function Sidebar({ isOpen, toggleSidebar }) {
   const menuItems = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -311,6 +315,10 @@ export default function App() {
               <Route path="/plugins" element={<PluginMarketplace />} />
               <Route path="/improvements" element={<SelfImprovementDashboard />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/industries" element={<IndustrySelector />} />
+              <Route path="/industries/:industryId/controls" element={<IndustryControls />} />
+              <Route path="/compliance" element={<ComplianceDashboard />} />
+              <Route path="/kpi" element={<KPIDashboard />} />
             </Routes>
           </main>
         </div>

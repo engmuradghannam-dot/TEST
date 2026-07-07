@@ -66,6 +66,9 @@ TENANT_APPS = [
     'apps.projects',
     'apps.assets',
     'apps.workflow',
+    'apps.industries',
+    'apps.kpi',
+    'apps.events',
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]

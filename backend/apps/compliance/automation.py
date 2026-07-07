@@ -1,11 +1,20 @@
-"""Compliance Automation engine: runs automated control checks and
-records evidence into the immutable ledger."""
+"""Compliance Automation engine — automated control checks + evidence.
+
+Complements the framework/requirement catalog with executable checks that
+run against the system and write tamper-proof evidence into the immutable
+audit ledger. A check maps a requirement to a callable(company)->bool.
+"""
 import importlib
 import logging
 
-from django.utils import timezone
-
 logger = logging.getLogger('nexus.compliance')
+
+# requirement_id -> dotted path of a callable(company)->bool
+AUTOMATED_CHECKS = {
+    'immutable-audit': 'apps.compliance.automation.check_immutable_audit',
+    'encryption-at-rest': 'apps.compliance.automation.check_encryption_at_rest',
+    'zero-trust': 'apps.compliance.automation.check_zero_trust_enabled',
+}
 
 
 def _resolve(path):
@@ -14,37 +23,33 @@ def _resolve(path):
 
 
 class ComplianceEngine:
-    def run_framework(self, framework_code: str, company=None) -> dict:
-        from .models import ComplianceFramework, ControlAssessment
+    def run_framework(self, framework_id: str, company=None) -> dict:
+        from .models import ComplianceFramework
         from apps.core.security.immutable_audit import ledger
-        fw = ComplianceFramework.objects.filter(code=framework_code).first()
+        fw = ComplianceFramework.objects.filter(framework_id=framework_id).first()
         if not fw:
-            return {'error': f'unknown framework {framework_code}'}
+            return {'error': f'unknown framework {framework_id}'}
         results = {'pass': 0, 'fail': 0, 'manual': 0}
-        for control in fw.controls.all():
-            if control.automated_check:
-                try:
-                    ok = _resolve(control.automated_check)(company)
-                    status = 'pass' if ok else 'fail'
-                    results['pass' if ok else 'fail'] += 1
-                    ControlAssessment.objects.create(
-                        control=control, status=status, automated=True,
-                        evidence={'checked_at': timezone.now().isoformat()})
-                    ledger.append('compliance.check', {
-                        'framework': framework_code,
-                        'control': control.control_id, 'status': status})
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning('control %s check failed: %s',
-                                   control.control_id, exc)
-                    results['manual'] += 1
-            else:
+        for req in fw.requirements.filter(is_active=True):
+            check_path = AUTOMATED_CHECKS.get(req.requirement_id)
+            if not check_path:
                 results['manual'] += 1
-        return {'framework': framework_code, **results,
-                'score': round(results['pass'] /
-                               max(sum(results.values()), 1), 2)}
+                continue
+            try:
+                ok = _resolve(check_path)(company)
+                results['pass' if ok else 'fail'] += 1
+                ledger.append('compliance.check', {
+                    'framework': framework_id,
+                    'requirement': req.requirement_id,
+                    'status': 'pass' if ok else 'fail'})
+            except Exception as exc:  # noqa: BLE001
+                logger.warning('check %s failed: %s', req.requirement_id, exc)
+                results['manual'] += 1
+        total = max(sum(results.values()), 1)
+        return {'framework': framework_id, **results,
+                'score': round(results['pass'] / total, 2)}
 
 
-# ── example automated checks ───────────────────────────────────────
 def check_immutable_audit(company=None) -> bool:
     from apps.core.security.immutable_audit import ledger
     return ledger.verify_chain()['intact']

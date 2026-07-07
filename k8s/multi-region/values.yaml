@@ -1,0 +1,166 @@
+# Multi-Region Nexus Framework Helm Values
+# Supports: us-east-1, us-west-2, eu-west-1, eu-central-1, ap-southeast-1, me-south-1
+
+global:
+  name: nexus-framework
+  version: "2.1.0"
+  imageRegistry: "ghcr.io/engmuradghannam-dot"
+
+  # Multi-region configuration
+  regions:
+    - name: us-east-1
+      provider: aws
+      location: "N. Virginia"
+      priority: primary
+      replicaCount: 3
+      resources:
+        requests:
+          cpu: "2000m"
+          memory: "4Gi"
+        limits:
+          cpu: "4000m"
+          memory: "8Gi"
+
+    - name: eu-west-1
+      provider: aws
+      location: "Ireland"
+      priority: secondary
+      replicaCount: 2
+      resources:
+        requests:
+          cpu: "1000m"
+          memory: "2Gi"
+        limits:
+          cpu: "2000m"
+          memory: "4Gi"
+
+    - name: me-south-1
+      provider: aws
+      location: "Bahrain"
+      priority: secondary
+      replicaCount: 2
+      resources:
+        requests:
+          cpu: "1000m"
+          memory: "2Gi"
+        limits:
+          cpu: "2000m"
+          memory: "4Gi"
+
+  # Cross-region replication
+  replication:
+    enabled: true
+    strategy: async  # async | sync | eventual
+    lagThresholdMs: 5000
+    conflictResolution: last-write-wins  # last-write-wins | vector-clock | custom
+
+  # Global load balancer
+  loadBalancer:
+    type: global  # global | regional
+    healthCheck:
+      path: /api/health/
+      interval: 10s
+      timeout: 5s
+      unhealthyThreshold: 3
+    geoRouting:
+      enabled: true
+      defaultRegion: us-east-1
+      rules:
+        - region: eu-west-1
+          countries: ["IE", "GB", "DE", "FR", "NL", "BE", "LU", "AT", "CH", "IT", "ES", "PT"]
+        - region: me-south-1
+          countries: ["SA", "AE", "QA", "KW", "BH", "OM", "JO", "IQ", "EG", "YE"]
+        - region: us-east-1
+          countries: ["US", "CA", "MX", "BR", "AR", "CL"]
+
+# Regional overrides
+regionalOverrides:
+  us-east-1:
+    database:
+      primary: true
+      host: nexus-db-primary.us-east-1.rds.amazonaws.com
+      readReplicas:
+        - nexus-db-replica-1.us-east-1.rds.amazonaws.com
+        - nexus-db-replica-2.us-east-1.rds.amazonaws.com
+    cache:
+      host: nexus-cache.us-east-1.cache.amazonaws.com
+      clusterMode: true
+      nodes: 3
+    storage:
+      class: gp3
+      size: 100Gi
+      iops: 3000
+
+  eu-west-1:
+    database:
+      primary: false
+      host: nexus-db.eu-west-1.rds.amazonaws.com
+      readReplicas:
+        - nexus-db-replica-1.eu-west-1.rds.amazonaws.com
+    cache:
+      host: nexus-cache.eu-west-1.cache.amazonaws.com
+      clusterMode: true
+      nodes: 2
+    storage:
+      class: gp3
+      size: 50Gi
+      iops: 1500
+
+  me-south-1:
+    database:
+      primary: false
+      host: nexus-db.me-south-1.rds.amazonaws.com
+      readReplicas: []
+    cache:
+      host: nexus-cache.me-south-1.cache.amazonaws.com
+      clusterMode: false
+      nodes: 1
+    storage:
+      class: gp3
+      size: 50Gi
+      iops: 1500
+
+# Service mesh
+serviceMesh:
+  enabled: true
+  type: istio
+  mtls:
+    enabled: true
+    mode: strict
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 1000
+    outlierDetection:
+      consecutiveErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+    circuitBreaker:
+      enabled: true
+      maxRequests: 100
+      maxRetries: 3
+
+# Observability
+observability:
+  metrics:
+    enabled: true
+    prometheus:
+      retention: 30d
+      scrapeInterval: 15s
+    thanos:
+      enabled: true
+      objectStore: s3
+  logs:
+    enabled: true
+    loki:
+      retention: 7d
+      replicationFactor: 2
+  tracing:
+    enabled: true
+    jaeger:
+      samplingRate: 0.1
+      collector:
+        enabled: true

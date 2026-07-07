@@ -1,0 +1,193 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nexus.fullname" . }}-backend
+  labels:
+    {{- include "nexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+    nexus.io/region: {{ .Values.global.region.name }}
+spec:
+  replicas: {{ .Values.global.region.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "nexus.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        {{- include "nexus.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+        nexus.io/region: {{ .Values.global.region.name }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/component
+                      operator: In
+                      values:
+                        - backend
+                topologyKey: topology.kubernetes.io/zone
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: nexus.io/region
+                    operator: In
+                    values:
+                      - {{ .Values.global.region.name }}
+
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: backend
+
+      containers:
+        - name: backend
+          image: "{{ .Values.global.imageRegistry }}/nexus-backend:{{ .Values.global.version }}"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+            - name: grpc
+              containerPort: 50051
+              protocol: TCP
+
+          env:
+            - name: REGION
+              value: {{ .Values.global.region.name }}
+            - name: REGION_PRIORITY
+              value: {{ .Values.global.region.priority }}
+            - name: DATABASE_HOST
+              value: {{ .Values.regionalOverrides.database.host }}
+            - name: DATABASE_PRIMARY
+              value: "{{ .Values.regionalOverrides.database.primary }}"
+            - name: CACHE_HOST
+              value: {{ .Values.regionalOverrides.cache.host }}
+            - name: EVENT_BUS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nexus-event-bus
+                  key: url
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                secretKeyRef:
+                  name: nexus-kafka
+                  key: bootstrap-servers
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://{{ .Values.global.region.name }}-otel-collector:4317"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.name=nexus-backend,service.region={{ .Values.global.region.name }}"
+
+          resources:
+            {{- toYaml .Values.global.region.resources | nindent 12 }}
+
+          livenessProbe:
+            httpGet:
+              path: /api/health/
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /api/health/ready/
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          startupProbe:
+            httpGet:
+              path: /api/health/startup/
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            - name: secrets
+              mountPath: /app/secrets
+              readOnly: true
+
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "nexus.fullname" . }}-config
+        - name: secrets
+          secret:
+            secretName: {{ include "nexus.fullname" . }}-secrets
+
+      serviceAccountName: {{ include "nexus.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "nexus.fullname" . }}-backend-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "nexus.fullname" . }}-backend
+  minReplicas: {{ .Values.global.region.replicaCount }}
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Pods
+      pods:
+        metric:
+          name: http_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "1000"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60

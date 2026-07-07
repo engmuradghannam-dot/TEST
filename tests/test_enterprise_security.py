@@ -185,15 +185,17 @@ class TestKnowledgeGraph:
 class TestComplianceAutomation:
     def test_automated_control_check(self):
         from apps.compliance.models import (ComplianceFramework,
-                                            ComplianceControl)
+                                            ComplianceRequirement)
         from apps.compliance.automation import engine
-        fw = ComplianceFramework.objects.create(code='soc2', name='SOC 2')
-        ComplianceControl.objects.create(
-            framework=fw, control_id='CC6.1', title='Audit integrity',
-            automated_check='apps.compliance.automation.check_immutable_audit')
-        ComplianceControl.objects.create(
-            framework=fw, control_id='CC6.7', title='Encryption config',
-            automated_check='apps.compliance.automation.check_encryption_at_rest')
+        fw = ComplianceFramework.objects.create(
+            framework_id='soc2', name='SOC 2', category='it_security',
+            description='SOC 2')
+        ComplianceRequirement.objects.create(
+            framework=fw, requirement_id='immutable-audit',
+            title='Audit integrity', description='x')
+        ComplianceRequirement.objects.create(
+            framework=fw, requirement_id='encryption-at-rest',
+            title='Encryption config', description='x')
         result = engine.run_framework('soc2')
         assert result['pass'] == 2
         assert result['score'] == 1.0
